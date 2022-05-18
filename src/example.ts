@@ -1,3 +1,5 @@
+import runTopology from '.'
+
 let topology = {
   id: 'samGov',
   resources: {
@@ -67,27 +69,40 @@ let topology = {
   },
 }
 
-runTopology({
-  id: 'foo',
-  resources: {
-    foo: {
-      init: async () => {
-        return 3
+const { emitter, promise } = runTopology(
+  {
+    id: 'foo',
+    resources: {
+      foo: {
+        init: async () => {
+          return 3
+        },
       },
     },
-  },
-  nodes: {
-    api: {
-      async run() {},
+    nodes: {
+      api: {
+        async run() {},
+      },
+    },
+    dag: {
+      api: { deps: [] },
+      details: { deps: ['api'] },
+      history: { deps: ['api'] },
     },
   },
-  dag: {
-    api: { deps: [] },
-    details: { deps: ['api'] },
-    history: { deps: ['api'] },
-  },
-})
+  { excludeNodes: ['api'], data: {} }
+)
 
+const perform = (msg) => {
+  if (msg.deliveryCount > 1) {
+    loadSnapshotFromMongo(msg)
+  }
+  const { emitter, promise } = runTopology(topology, options)
+  emitter.on('data', (snapshot) => {
+    // write to mongo
+    msg.working()
+  })
+}
 
 // Feathers service
 /*

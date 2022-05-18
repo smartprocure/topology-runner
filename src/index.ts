@@ -47,7 +47,7 @@ const filterDAG = (dag: DAG, options: Options = {}): DAG => {
  */
 const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
   const completed = findKeys({ status: 'completed' }, data)
-  const runningOrCompleted = Object.keys(data)
+  const running = findKeys({ status: 'running' }, data)
   const nodes: string[] = []
   for (const node in dag) {
     const { deps } = dag[node]
@@ -56,7 +56,7 @@ const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
     }
   }
   // Exclude nodes that have already completed or are running
-  return _.difference(nodes, runningOrCompleted)
+  return _.difference(nodes, [...completed, ...running])
 }
 
 /**
@@ -73,7 +73,7 @@ const initResources = async (topology: Topology, resources: string[]) => {
 
 /**
  * Calculate resources that are needed but not initialized.
- * Mutates initialized adding the missing resources.
+ * Mutates initialized, adding the missing resources.
  */
 const initMissingResources = async (
   topology: Topology,
@@ -121,6 +121,7 @@ const runTopology = (topology: Topology, options: Options = {}) => {
   // Initial snapshot
   const snapshot: Snapshot = { id, status: 'running', dag, data: {} }
   const emitter = new EventEmitter<Events>()
+  let allDone = false
   // Emit
   emitter.emit('data', snapshot)
 
@@ -135,7 +136,7 @@ const runTopology = (topology: Topology, options: Options = {}) => {
         // Emit
         emitter.emit('done', snapshot)
         // We're done
-        resolve(snapshot)
+        return resolve(snapshot)
       }
       // Get nodes with resolved dependencies that have not been run
       const readyToRunNodes = getNodesReadyToRun(dag, snapshot.data)
@@ -172,8 +173,6 @@ const runTopology = (topology: Topology, options: Options = {}) => {
             snapshot.data[node].output = output
             snapshot.data[node].status = 'completed'
             snapshot.data[node].finished = new Date()
-            // Don't track promise anymore
-            delete promises[node]
             // Emit
             emitter.emit('data', snapshot)
           })
@@ -186,11 +185,19 @@ const runTopology = (topology: Topology, options: Options = {}) => {
             // Emit
             emitter.emit('error', snapshot)
             // We're done
+            allDone = true
             reject(e)
           })
       }
       // Wait for a promise to resolve
-      await raceObject(promises)
+      const node = await raceObject(promises)
+      // We run this code after awaiting to allow for the promise.catch
+      // callback to execute.
+      if (allDone) {
+        return
+      }
+      // Don't track promise anymore
+      delete promises[node]
     }
   })
   return { emitter, promise }

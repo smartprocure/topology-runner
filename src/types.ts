@@ -1,5 +1,5 @@
 interface Resource<A> {
-  init(): Promise<A>
+  init(): Promise<A> | A
 }
 
 type ResourceInitializers = Record<string, Resource<any>>
@@ -30,7 +30,7 @@ export interface Options {
   data?: any // Fed into starting nodes (i.e., nodes with no dependencies)
 }
 
-export type Status = 'running' | 'completed' | 'errored'
+export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 interface NodeData {
   status: Status
