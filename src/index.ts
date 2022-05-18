@@ -10,12 +10,20 @@ import {
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
 
+/**
+ * Remove excludesNodes from DAG and from the dependency lists
+ * of nodes.
+ */
 const removeExcludeNodes = (excludeNodes: string[]) =>
   _.flow(
     _.omit(excludeNodes),
     _.mapValues(_.update('deps', _.pullAll(excludeNodes)))
   )
 
+/**
+ * Only include nodes from DAG in includeNodes and remove dependencies
+ * not in includeNodes.
+ */
 const pickIncludeNodes = (includeNodes: string[]) =>
   _.flow(
     _.pick(includeNodes),
@@ -50,6 +58,9 @@ const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
   return _.difference(nodes, runningOrCompleted)
 }
 
+/**
+ * Call init on resources.
+ */
 const initResources = async (topology: Topology, resources: string[]) => {
   const readyResources: any[] = await Promise.all(
     resources.map((resource) =>
