@@ -52,3 +52,5 @@ export interface Snapshot {
 }
 
 export type ObjectOfPromises = Record<string, Promise<any>>
+
+export type Events = 'data' | 'error' | 'done'

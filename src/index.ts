@@ -2,6 +2,7 @@ import _ from 'lodash/fp'
 import {
   ObjectOfPromises,
   DAG,
+  Events,
   Snapshot,
   Options,
   Topology,
@@ -119,7 +120,7 @@ const runTopology = (topology: Topology, options: Options = {}) => {
   const promises: ObjectOfPromises = {}
   // Initial snapshot
   const snapshot: Snapshot = { id, status: 'running', dag, data: {} }
-  const emitter = new EventEmitter()
+  const emitter = new EventEmitter<Events>()
   // Emit
   emitter.emit('data', snapshot)
 
