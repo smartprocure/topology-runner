@@ -3,7 +3,6 @@ import { ObjectOfPromises } from './types'
 
 /**
  * Return the key of the first promise from the object that resolves.
- * Rejections are not handled.
  */
 export const raceObject = async (obj: ObjectOfPromises): Promise<string> => {
   const objToArr = _.flow(

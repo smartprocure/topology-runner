@@ -35,7 +35,7 @@ export type Status = 'running' | 'completed' | 'errored'
 interface NodeData {
   status: Status
   started: Date
-  completed: Date
+  finished: Date
   input: any
   output: any
   state: any

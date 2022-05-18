@@ -103,6 +103,10 @@ const getInputData = (dag: DAG, snapshot: Snapshot, node: string) => {
  * Run a topology consisting of a DAG and functions for each node in the
  * DAG. A subset of the DAG can be executed by setting either includeNodes
  * or excludeNodes. Initial data is passed via options.data.
+ *
+ * Returns an event emitter and a promise. The event emitter emits data
+ * every time the topology snapshot updates, done when the topology completes,
+ * and error when a node throws an error.
  */
 const runTopology = (topology: Topology, options: Options = {}) => {
   // Get the filtered dag
@@ -111,6 +115,8 @@ const runTopology = (topology: Topology, options: Options = {}) => {
   // Initialized resources
   const initialized: Record<string, any> = {}
   const id = topology.id
+  // Track node promises
+  const promises: ObjectOfPromises = {}
   // Initial snapshot
   const snapshot: Snapshot = { id, status: 'running', dag, data: {} }
   const emitter = new EventEmitter()
@@ -118,9 +124,8 @@ const runTopology = (topology: Topology, options: Options = {}) => {
   emitter.emit('data', snapshot)
 
   const promise = new Promise<Snapshot>(async (resolve, reject) => {
-    // Track node promises
-    const promises: ObjectOfPromises = {}
     while (true) {
+      // Get completed nodes
       const completed = findKeys({ status: 'completed' }, snapshot.data)
       // All nodes have completed
       if (completed.length === nodes.length) {
@@ -136,8 +141,12 @@ const runTopology = (topology: Topology, options: Options = {}) => {
       // Run nodes
       for (const node of readyToRunNodes) {
         const updateStateFn = (state: any) => {
+          // Update snapshot
           snapshot.data[node].state = state
+          // Emit
+          emitter.emit('data', snapshot)
         }
+        // Get the node
         const { run, resources = [] } = topology.nodes[node]
         // Initialize resources for node if needed
         await initMissingResources(topology, resources, initialized)
@@ -161,7 +170,7 @@ const runTopology = (topology: Topology, options: Options = {}) => {
             // Update snapshot
             snapshot.data[node].output = output
             snapshot.data[node].status = 'completed'
-            snapshot.data[node].completed = new Date()
+            snapshot.data[node].finished = new Date()
             // Don't track promise anymore
             delete promises[node]
             // Emit
@@ -169,6 +178,8 @@ const runTopology = (topology: Topology, options: Options = {}) => {
           })
           .catch((e) => {
             // Update snapshot
+            snapshot.data[node].status = 'errored'
+            snapshot.data[node].finished = new Date()
             snapshot.status = 'errored'
             snapshot.error = e
             // Emit
