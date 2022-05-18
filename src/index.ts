@@ -8,7 +8,7 @@ import {
   SnapshotData,
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
-import EventEmitter from 'node:events'
+import EventEmitter from 'eventemitter3'
 
 const removeExcludeNodes = (excludeNodes: string[]) =>
   _.flow(
