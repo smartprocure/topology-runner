@@ -2,11 +2,11 @@ interface Resource<A> {
   init(): Promise<A>
 }
 
-type Resources = Record<string, Resource<any>>
+type ResourceInitializers = Record<string, Resource<any>>
 type UpdateStateFn = (state: any) => void
 
 interface RunInput {
-  resources: Resources
+  resources: Record<string, any>
   data: any
   updateStateFn: UpdateStateFn
 }
@@ -19,7 +19,7 @@ export type DAG = Record<string, { deps: string[] }>
 
 export interface Topology {
   id: string
-  resources?: Resources
+  resources?: ResourceInitializers
   nodes: Record<string, NodeDef>
   dag: DAG
 }
@@ -41,11 +41,13 @@ interface NodeData {
   state: any
 }
 
-export interface TopologySnapshot {
+export type SnapshotData = Record<string, NodeData>
+
+export interface Snapshot {
   id: string
   status: Status
   dag: DAG
-  data: Record<string, NodeData>
+  data: SnapshotData
   error?: any
 }
 
