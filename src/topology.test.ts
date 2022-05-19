@@ -351,8 +351,6 @@ test('resumeTopology', async (t) => {
   const attachmentsRun: RunFn = async ({ data, state, updateStateFn }) => {
     // Flatten
     data = data.flat()
-    // Order data
-    data.sort()
     const ids: number[] = state ? data.slice(state.index) : data
     ids.sort()
     const output: Record<number, string> = state ? state.output : {}
