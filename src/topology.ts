@@ -292,7 +292,6 @@ export const resumeTopology = (spec: Spec, snapshot: Snapshot) => {
     data: setUncompletedNodesToPending(snapshot.data),
   }
   delete snap.error
-  delete snap.finished
   // Run the topology
   return _runTopology(spec, snap, snap.dag)
 }

@@ -11,7 +11,24 @@ let spec = {
   },
   nodes: {
     api: {
-      run: ({ resources, data, updateStateFn }) => {},
+      run: async ({ resources, data, updateStateFn, state }) => {
+        // Order data
+        data.sort()
+        // Get a subset of the data if resume scenario
+        const urls = state ? data.slice(state) : data
+        // Process data
+        const ids = []
+        urls.forEach(async (url, index) => {
+          const res = await fetchFromService(url)
+          await writeToMongo(res)
+          const id = res.id
+          ids.push(id)
+          // Update state
+          updateStateFn(index)
+        })
+        // Output data for next node
+        return ids
+      },
       resources: [],
       timeout: 5000,
     },
@@ -132,13 +149,14 @@ const perform = async (msg) => {
   const { emitter, promise } = isRedelivery
     ? resumeTopology(spec, await loadSnapshotFromMongo(msg))
     : runTopology(spec, dag, options)
-  emitter.on('data', (snapshot) => {
-    // write to mongo
-    persistToMongo(snapshot)
+  const persistSnapshot = (snapshot) => {
     // Let NATS know we're working
     msg.working()
-  })
-  emitter.on('done', persistToMongo)
+    // write to mongo
+    persistToMongo(msg, snapshot)
+  }
+  emitter.on('data', persistSnapshot)
+  emitter.on('done', persistSnapshot)
   return promise
 }
 
