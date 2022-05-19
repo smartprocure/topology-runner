@@ -215,6 +215,10 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
   return { emitter, promise }
 }
 
+/*
+ * Set input for nodes with no dependencies to options.data,
+ * if exists.
+ */
 const initData = (dag: DAG, options: Options = {}) => {
   // Get nodes with no dependencies
   const noDepsNodes = findKeys(
@@ -250,6 +254,9 @@ export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
   return _runTopology(spec, snapshot, dag)
 }
 
+/**
+ * Set nodes with status of running to pending.
+ */
 const setRunningNodesToPending = _.update(
   'data',
   _.mapValues(({ status, ...obj }) => ({
