@@ -1,7 +1,6 @@
-import runTopology from '.'
+/* eslint-disable */
 
 let topology = {
-  id: 'samGov',
   resources: {
     elasticCloud: {
       init: () => {},
@@ -69,9 +68,35 @@ let topology = {
   },
 }
 
+const nodeDefs = defineNodes({
+  resources: {
+    foo: {
+      init: async () => {
+        return 3
+      },
+    },
+  },
+  nodes: {
+    api: {
+      async run() {},
+      resources: ['elasticCloud'],
+      timeout: 1000,
+    },
+  },
+})
+
+nodeDefs.runDAG({
+  dag: {
+    api: { deps: [] },
+    details: { deps: ['api'] },
+    history: { deps: ['api'] },
+  },
+  excludeNodes: ['api'],
+  data: {},
+})
+
 const { emitter, promise } = runTopology(
   {
-    id: 'foo',
     resources: {
       foo: {
         init: async () => {
@@ -93,22 +118,61 @@ const { emitter, promise } = runTopology(
   { excludeNodes: ['api'], data: {} }
 )
 
-const perform = (msg) => {
-  if (msg.deliveryCount > 1) {
-    loadSnapshotFromMongo(msg)
-  }
-  const { emitter, promise } = runTopology(topology, options)
+resumeTopology(topology, {
+  status: 'running',
+  dag: {
+    api: { deps: [] },
+    details: { deps: ['api'] },
+    history: { deps: ['api'] },
+  },
+  data: {
+    api: {
+      status: 'completed',
+      started: '2022-01-01T12:00:00Z',
+      completed: '2022-01-01T12:05:00Z',
+      input: {
+        startDate: '2020-01-01',
+        endDate: '2020-12-31',
+      },
+      state: {
+        date: '2020-04-01',
+        id: '123',
+      },
+      output: ['123', '456'],
+    },
+    details: {
+      status: 'running',
+      state: {
+        id: 3,
+      },
+      input: { api: ['123', '456'] },
+    },
+  },
+})
+
+/**
+ * Example job
+ */
+const perform = async (msg) => {
+  const isRedelivery = msg.deliveryCount > 1
+  const { emitter, promise } = isRedelivery
+    ? resumeTopology(topology, await loadSnapshotFromMongo(msg))
+    : runTopology(topology, options)
   emitter.on('data', (snapshot) => {
     // write to mongo
+    persistToMongo(snapshot)
+    // Let NATS know we're working
     msg.working()
   })
+  emitter.on('done', persistToMongo)
+  return promise
 }
 
 // Feathers service
 /*
 POST /topology
 {
-  id: 'samGov',
+  topologyId: 'samGov',
   includeNodes: ['api'],
   data: {}
 }
@@ -117,7 +181,8 @@ GET /topology?id=samGov&status=running
 
 // MongoDB topology collection record
 let mongo = {
-  id: 'samGov',
+  // MongoDB only
+  topologyId: 'samGov',
   // MongoDB only
   stream: 'whatever',
   // MongoDB only

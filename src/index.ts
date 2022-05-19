@@ -109,17 +109,16 @@ const getInputData = (dag: DAG, snapshot: Snapshot, node: string) => {
  * every time the topology snapshot updates, done when the topology completes,
  * and error when a node throws an error.
  */
-const runTopology = (topology: Topology, options: Options = {}) => {
+export const runTopology = (topology: Topology, options: Options = {}) => {
   // Get the filtered dag
   const dag = filterDAG(topology.dag, options)
   const nodes = Object.keys(dag)
   // Initialized resources
   const initialized: Record<string, any> = {}
-  const id = topology.id
   // Track node promises
   const promises: ObjectOfPromises = {}
   // Initial snapshot
-  const snapshot: Snapshot = { id, status: 'running', dag, data: {} }
+  const snapshot: Snapshot = { status: 'running', dag, data: {} }
   const emitter = new EventEmitter<Events>()
   let allDone = false
   // Emit
@@ -196,11 +195,13 @@ const runTopology = (topology: Topology, options: Options = {}) => {
       if (allDone) {
         return
       }
-      // Don't track promise anymore
+      // Don't track the resolved promise anymore
       delete promises[node]
     }
   })
   return { emitter, promise }
 }
 
-export default runTopology
+export const resumeTopology = (topology: Topology, snapshot: Snapshot) => {
+
+}

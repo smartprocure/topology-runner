@@ -18,7 +18,6 @@ interface NodeDef {
 export type DAG = Record<string, { deps: string[] }>
 
 export interface Topology {
-  id: string
   resources?: ResourceInitializers
   nodes: Record<string, NodeDef>
   dag: DAG
@@ -44,7 +43,6 @@ interface NodeData {
 export type SnapshotData = Record<string, NodeData>
 
 export interface Snapshot {
-  id: string
   status: Status
   dag: DAG
   data: SnapshotData
