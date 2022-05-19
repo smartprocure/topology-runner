@@ -258,13 +258,14 @@ export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
 /**
  * Set uncompleted nodes to pending.
  */
-const setUncompletedNodesToPending = _.update(
-  'data',
-  _.mapValues(({ status, ...obj }: NodeData) => ({
-    ...obj,
-    status: status !== 'completed' ? 'pending' : status,
-  }))
-)
+const setUncompletedNodesToPending = (data: SnapshotData): SnapshotData =>
+  _.mapValues(
+    ({ status, ...obj }) => ({
+      ...obj,
+      status: status !== 'completed' ? 'pending' : status,
+    }),
+    data
+  )
 
 /**
  * Resume a topology from a previous snapshot.
@@ -275,8 +276,13 @@ export const resumeTopology = (spec: Spec, snapshot: Snapshot) => {
     const emitter = new EventEmitter<Events>()
     return { emitter, promise: Promise.resolve(snapshot) }
   }
-  // Set uncompleted nodes to pending
-  const snap: Snapshot = setUncompletedNodesToPending(snapshot)
+  // Initialize snapshot for running
+  const snap: Snapshot = {
+    ...snapshot,
+    status: 'running',
+    data: setUncompletedNodesToPending(snapshot.data),
+  }
+  delete snap.error
   // Run the topology
   return _runTopology(spec, snap, snap.dag)
 }
