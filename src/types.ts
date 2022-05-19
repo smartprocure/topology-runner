@@ -5,11 +5,12 @@ interface Resource<A> {
 type ResourceInitializers = Record<string, Resource<any>>
 type UpdateStateFn = (state: any) => void
 
-interface RunInput {
+export interface RunInput {
   resources: Record<string, any>
   data: any
   updateStateFn: UpdateStateFn
   state?: any
+  signal: AbortSignal
 }
 
 type Millis = number

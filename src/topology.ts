@@ -5,12 +5,12 @@ import {
   Events,
   Snapshot,
   Options,
+  RunInput,
   Spec,
   SnapshotData,
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
-import { timeout as pTimeout } from 'promise-timeout'
 /**
  * Remove excludesNodes from DAG and from the dependency lists
  * of nodes.
@@ -191,19 +191,30 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
         const updateStateFn = events.updateState
         // Resume scenario
         const state = snapshot.data[node].state
+        // Abort after timeout
+        const abortController = new AbortController()
+        if (timeout) {
+          setTimeout(abortController.abort, timeout)
+        }
         // Run fn input
-        const runInput = { data, resources: reqResources, updateStateFn, state }
+        const runInput: RunInput = {
+          data,
+          resources: reqResources,
+          updateStateFn,
+          state,
+          signal: abortController.signal,
+        }
         // Update snapshot
         events.running(data)
         // Call run fn
-        const runProm = run(runInput)
-        const prom = timeout ? pTimeout(runProm, timeout) : runProm
-        promises[node] = prom.then(events.completed).catch((e) => {
-          events.errored(e)
-          // We're done
-          done = true
-          reject(e)
-        })
+        promises[node] = run(runInput)
+          .then(events.completed)
+          .catch((e) => {
+            events.errored(e)
+            // We're done
+            done = true
+            reject(e)
+          })
       }
       // Wait for a promise to resolve
       const node = await raceObject(promises)
