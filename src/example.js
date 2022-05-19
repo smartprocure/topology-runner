@@ -12,17 +12,19 @@ let spec = {
   nodes: {
     api: {
       run: async ({ resources, data, updateStateFn, state }) => {
+        // Flatten the input data. Assumes all sources have the same shape
+        // [['http://foo.com', 'https://bar.org'], ['https://site.net']]
+        data = data.flat()
         // Order data
         data.sort()
-        // Get a subset of the data if resume scenario
+        // Get a subset of the data if resuming
         const urls = state ? data.slice(state) : data
         // Process data
         const ids = []
         urls.forEach(async (url, index) => {
           const res = await fetchFromService(url)
-          await writeToMongo(res)
-          const id = res.id
-          ids.push(id)
+          await writeToDB(res)
+          ids.push(res.id)
           // Update state
           updateStateFn(index)
         })
