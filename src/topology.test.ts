@@ -346,27 +346,28 @@ test('getResumeSnapshot', (t) => {
   })
 })
 
-test.skip('resumeTopology', async (t) => {
-  const testState = { attempt: 1 }
+test('resumeTopology', async (t) => {
+  let attempt = 1
   const attachmentsRun: RunFn = async ({ data, state, updateStateFn }) => {
     // Flatten
     data = data.flat()
     // Order data
     data.sort()
-    const ids: number[] = state ? data.slice(state) : data
+    const ids: number[] = state ? data.slice(state.index) : data
     ids.sort()
-    const obj: Record<number, string> = {}
+    const output: Record<number, string> = state ? state.output : {}
     for (let i = 0; i < ids.length; i++) {
-      updateStateFn(i)
       const id = ids[i]
-      obj[id] = `file${id}.jpg`
-      console.log('TEST STATE %O', testState)
-      if (testState.attempt === 1) {
-        console.log('THROW')
+      output[id] = `file${id}.jpg`
+      // Simulate error while processing second element.
+      // Error occurs the first time the fn is called.
+      if (i === 1 && attempt++ === 1) {
         throw new Error(`Invalid id: ${id}`)
       }
+      // Successfully processed so record state
+      updateStateFn({ index: i, output })
     }
-    return obj
+    return output
   }
   const modifiedSpec = _.set('nodes.attachments.run', attachmentsRun, spec)
   const { promise, getSnapshot } = runTopology(modifiedSpec, dag)
@@ -401,22 +402,24 @@ test.skip('resumeTopology', async (t) => {
         attachments: {
           input: [[1, 2, 3]],
           status: 'errored',
-          state: 0,
+          state: {
+            index: 0,
+            output: {
+              '1': 'file1.jpg',
+            },
+          },
         },
       },
-      error: new Error('Invalid id: 1'),
+      error: new Error('Invalid id: 2'),
     },
     'error snapshot'
   )
-  testState.attempt = 2
   const { promise: resumeProm } = await resumeTopology(modifiedSpec, snapshot)
   const resumeSnapshot = await resumeProm
-  console.log(JSON.stringify(snapshot, null, 2))
   t.like(
     resumeSnapshot,
     {
-      status: 'errored',
-      started: '2022-05-19T21:44:29.552Z',
+      status: 'completed',
       dag: {
         api: { deps: [] },
         details: { deps: ['api'] },
@@ -425,33 +428,45 @@ test.skip('resumeTopology', async (t) => {
       },
       data: {
         api: {
-          started: '2022-05-19T21:44:29.552Z',
           input: [],
           status: 'completed',
           output: [1, 2, 3],
-          finished: '2022-05-19T21:44:29.552Z',
         },
         details: {
-          started: '2022-05-19T21:44:29.553Z',
           input: [[1, 2, 3]],
           status: 'completed',
           output: {
-            '1': 'description 1',
-            '2': 'description 2',
-            '3': 'description 3',
+            1: 'description 1',
+            2: 'description 2',
+            3: 'description 3',
           },
-          finished: '2022-05-19T21:44:29.553Z',
         },
         attachments: {
-          started: '2022-05-19T21:44:29.553Z',
           input: [[1, 2, 3]],
-          status: 'errored',
-          state: 0,
-          finished: '2022-05-19T21:44:29.553Z',
+          status: 'completed',
+          output: {
+            1: 'file1.jpg',
+            2: 'file2.jpg',
+            3: 'file3.jpg',
+          },
+        },
+        writeToDB: {
+          input: [
+            {
+              1: 'description 1',
+              2: 'description 2',
+              3: 'description 3',
+            },
+            {
+              1: 'file1.jpg',
+              2: 'file2.jpg',
+              3: 'file3.jpg',
+            },
+          ],
+          status: 'completed',
+          output: null,
         },
       },
-      error: {},
-      finished: '2022-05-19T21:44:29.553Z',
     },
     'resume snapshot'
   )
