@@ -14,9 +14,10 @@ export interface RunInput {
 }
 
 type Millis = number
+export type RunFn = (arg: RunInput) => Promise<any>
 
 interface NodeDef {
-  run(arg: RunInput): Promise<any>
+  run: RunFn
   resources?: string[]
   timeout?: Millis
 }
@@ -37,7 +38,7 @@ export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 export interface NodeData {
   status: Status
-  started: Date
+  started?: Date
   finished?: Date
   input: any
   output?: any

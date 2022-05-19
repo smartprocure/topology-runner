@@ -124,8 +124,8 @@ resumeTopology(spec, {
   data: {
     api: {
       status: 'completed',
-      started: '2022-01-01T12:00:00Z',
-      finished: '2022-01-01T12:05:00Z',
+      started: new Date('2022-01-01T12:00:00Z'),
+      finished: new Date('2022-01-01T12:05:00Z'),
       input: {
         startDate: '2020-01-01',
         endDate: '2020-12-31',

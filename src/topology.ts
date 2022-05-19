@@ -35,7 +35,7 @@ const pickIncludeNodes = (includeNodes: string[]) =>
  * Handle excludeNodes and includeNodes options, transforming the
  * DAG accordingly. Only one option will be handled, not both.
  */
-const filterDAG = (dag: DAG, options: Options = {}): DAG => {
+export const filterDAG = (dag: DAG, options: Options = {}): DAG => {
   if (options.excludeNodes) return removeExcludeNodes(options.excludeNodes)(dag)
   if (options.includeNodes) return pickIncludeNodes(options.includeNodes)(dag)
   return dag
@@ -45,7 +45,7 @@ const filterDAG = (dag: DAG, options: Options = {}): DAG => {
  * Get a list of nodes where all dependencies have completed.
  * Excludes nodes that have already completed or are running.
  */
-const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
+export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
   const completed = findKeys({ status: 'completed' }, data)
   const running = findKeys({ status: 'running' }, data)
   const nodes: string[] = []
@@ -62,7 +62,7 @@ const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
 /**
  * Call init on resources.
  */
-const initResources = async (spec: Spec, resources: string[]) => {
+export const initResources = async (spec: Spec, resources: string[]) => {
   const values: any[] = await Promise.all(
     resources.map((resource) => _.result(['resources', resource, 'init'], spec))
   )
@@ -91,9 +91,8 @@ const initMissingResources = async (
 /**
  * Generate an array from the outputs of the node's dependencies.
  */
-const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
-  // Handle resume scenario by first checking if input data already exists
-  // for node.
+export const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
+  // Get input data off of snapshot if exists
   if (_.has([node, 'input'], data)) {
     return _.get([node, 'input'], data)
   }
@@ -119,9 +118,11 @@ const nodeEventHandler = (
   }
   const running = (data: any) => {
     // Update snapshot
-    snapshot.data[node].started = new Date()
-    snapshot.data[node].input = data
-    snapshot.data[node].status = 'running'
+    snapshot.data[node] = {
+      started: new Date(),
+      input: data,
+      status: 'running',
+    }
     // Emit
     emitter.emit('data', snapshot)
   }
@@ -147,7 +148,19 @@ const nodeEventHandler = (
   return { updateState, running, completed, errored }
 }
 
+/**
+ * Check if all nodes in the DAG are in the spec
+ */
+export const getMissingSpecNodes = (spec: Spec, dag: DAG) =>
+  _.difference(Object.keys(dag), Object.keys(spec.nodes))
+
 const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
+  const missingSpecNodes = getMissingSpecNodes(spec, dag)
+  if (missingSpecNodes.length) {
+    throw new Error(
+      `Missing the following nodes in spec: ${missingSpecNodes.join(', ')}`
+    )
+  }
   const nodes = Object.keys(dag)
   // Initialized resources
   const initialized: Record<string, any> = {}
@@ -190,7 +203,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
         // Callback to update state
         const updateStateFn = events.updateState
         // Resume scenario
-        const state = snapshot.data[node].state
+        const state = snapshot.data[node]?.state
         // Abort after timeout
         const abortController = new AbortController()
         if (timeout) {
@@ -230,26 +243,29 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
       delete promises[node]
     }
   })
-  return { emitter, promise }
+  const getSnapshot = () => snapshot
+
+  return { emitter, promise, getSnapshot }
 }
 
 /*
  * Set input for nodes with no dependencies to options.data,
  * if exists.
  */
-const initData = (dag: DAG, options: Options = {}) => {
+export const initSnapshotData = (dag: DAG, options: Options = {}) => {
+  if (!_.has('data', options)) {
+    return {}
+  }
   // Get nodes with no dependencies
   const noDepsNodes = findKeys(
     ({ deps }: { deps: string[] }) => _.isEmpty(deps),
     dag
   )
   // Initialize data
-  return options.data
-    ? noDepsNodes.reduce(
-        (acc, node) => _.set([node, 'input'], options.data, acc),
-        {}
-      )
-    : {}
+  return noDepsNodes.reduce(
+    (acc, node) => _.set([node, 'input'], options.data, acc),
+    {}
+  )
 }
 
 /**
@@ -264,8 +280,8 @@ const initData = (dag: DAG, options: Options = {}) => {
 export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
   // Get the filtered dag
   const dag = filterDAG(inputDag, options)
-  // Initialize data
-  const data = initData(dag, options)
+  // Initialize snapshot data
+  const data = initSnapshotData(dag, options)
   // Initial snapshot
   const snapshot: Snapshot = {
     status: 'running',
@@ -278,17 +294,28 @@ export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
 }
 
 /**
- * Set uncompleted nodes to pending.
+ * Set uncompleted nodes to pending and reset appropriate
+ * NodeDef fields.
  */
-const setUncompletedNodesToPending = (data: SnapshotData): SnapshotData =>
-  _.mapValues(
-    ({ status, ...obj }) => ({
-      ...obj,
-      status: status !== 'completed' ? 'pending' : status,
-    }),
-    data
-  )
+const resetUncompletedNodes = (data: SnapshotData): SnapshotData =>
+  _.mapValues((nodeData) => {
+    const { status, ...obj } = nodeData
+    return status === 'completed'
+      ? nodeData
+      : { ..._.pick(['input', 'state'], obj), status: 'pending' }
+  }, data)
 
+export const getResumeSnapshot = (snapshot: Snapshot) => {
+  const snap: Snapshot = {
+    ...snapshot,
+    status: 'running',
+    started: new Date(),
+    data: resetUncompletedNodes(snapshot.data),
+  }
+  delete snap.error
+  delete snap.finished
+  return snap
+}
 /**
  * Resume a topology from a previous snapshot.
  */
@@ -299,13 +326,7 @@ export const resumeTopology = (spec: Spec, snapshot: Snapshot) => {
     return { emitter, promise: Promise.resolve(snapshot) }
   }
   // Initialize snapshot for running
-  const snap: Snapshot = {
-    ...snapshot,
-    status: 'running',
-    started: new Date(),
-    data: setUncompletedNodesToPending(snapshot.data),
-  }
-  delete snap.error
+  const snap = getResumeSnapshot(snapshot)
   // Run the topology
   return _runTopology(spec, snap, snap.dag)
 }
