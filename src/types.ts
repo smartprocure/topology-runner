@@ -12,9 +12,12 @@ interface RunInput {
   state?: any
 }
 
+type Millis = number
+
 interface NodeDef {
   run(arg: RunInput): Promise<any>
   resources?: string[]
+  timeout?: Millis
 }
 export type DAG = Record<string, { deps: string[] }>
 

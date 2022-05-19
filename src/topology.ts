@@ -10,7 +10,7 @@ import {
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
-
+import { timeout as pTimeout } from 'promise-timeout'
 /**
  * Remove excludesNodes from DAG and from the dependency lists
  * of nodes.
@@ -179,7 +179,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
         // Snapshot updater
         const events = nodeEventHandler(node, snapshot, emitter)
         // Get the node
-        const { run, resources = [] } = spec.nodes[node]
+        const { run, resources = [], timeout } = spec.nodes[node]
         // Initialize resources for node if needed
         await initMissingResources(spec, resources, initialized)
         // Use initial data if node has no dependencies, otherwise, data from
@@ -196,14 +196,14 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
         // Update snapshot
         events.running(data)
         // Call run fn
-        promises[node] = run(runInput)
-          .then(events.completed)
-          .catch((e) => {
-            events.errored(e)
-            // We're done
-            done = true
-            reject(e)
-          })
+        const runProm = run(runInput)
+        const prom = timeout ? pTimeout(runProm, timeout) : runProm
+        promises[node] = prom.then(events.completed).catch((e) => {
+          events.errored(e)
+          // We're done
+          done = true
+          reject(e)
+        })
       }
       // Wait for a promise to resolve
       const node = await raceObject(promises)
