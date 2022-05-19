@@ -11,7 +11,7 @@ let spec = {
   },
   nodes: {
     api: {
-      run: async ({ resources, data, updateStateFn, state }) => {
+      run: async ({ resources, data, updateStateFn, state, signal }) => {
         // Flatten the input data. Assumes all sources have the same shape
         // [['http://foo.com', 'https://bar.org'], ['https://site.net']]
         data = data.flat()
@@ -21,13 +21,16 @@ let spec = {
         const urls = state ? data.slice(state) : data
         // Process data
         const ids = []
-        urls.forEach(async (url, index) => {
+        for (let i = 0; i < urls.length; i++) {
+          const url = urls[i]
+          // Throw if timeout occurred
+          signal.throwIfAborted()
           const res = await fetchFromService(url)
           await writeToDB(res)
           ids.push(res.id)
           // Update state
           updateStateFn(index)
-        })
+        }
         // Output data for next node
         return ids
       },

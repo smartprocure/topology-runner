@@ -194,7 +194,10 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
         // Abort after timeout
         const abortController = new AbortController()
         if (timeout) {
-          setTimeout(abortController.abort, timeout)
+          setTimeout(
+            () => abortController.abort(`Timeout occurred after ${timeout} ms`),
+            timeout
+          )
         }
         // Run fn input
         const runInput: RunInput = {
