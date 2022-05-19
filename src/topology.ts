@@ -269,6 +269,11 @@ const setRunningNodesToPending = _.update(
  * Resume a topology from a previous snapshot.
  */
 export const resumeTopology = (spec: Spec, snapshot: Snapshot) => {
+  // Ensures resumption is idempotent
+  if (snapshot.status === 'completed') {
+    const emitter = new EventEmitter<Events>()
+    return { emitter, promise: Promise.resolve(snapshot) }
+  }
   // Set status of running nodes to pending
   const snap = setRunningNodesToPending(snapshot)
   // Run the topology
