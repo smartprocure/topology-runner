@@ -68,33 +68,6 @@ let topology = {
   },
 }
 
-const nodeDefs = defineNodes({
-  resources: {
-    foo: {
-      init: async () => {
-        return 3
-      },
-    },
-  },
-  nodes: {
-    api: {
-      async run() {},
-      resources: ['elasticCloud'],
-      timeout: 1000,
-    },
-  },
-})
-
-nodeDefs.runDAG({
-  dag: {
-    api: { deps: [] },
-    details: { deps: ['api'] },
-    history: { deps: ['api'] },
-  },
-  excludeNodes: ['api'],
-  data: {},
-})
-
 const { emitter, promise } = runTopology(
   {
     resources: {
