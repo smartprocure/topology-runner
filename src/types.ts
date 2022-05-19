@@ -9,6 +9,7 @@ interface RunInput {
   resources: Record<string, any>
   data: any
   updateStateFn: UpdateStateFn
+  state?: any
 }
 
 interface NodeDef {
@@ -17,10 +18,9 @@ interface NodeDef {
 }
 export type DAG = Record<string, { deps: string[] }>
 
-export interface Topology {
+export interface Spec {
   resources?: ResourceInitializers
   nodes: Record<string, NodeDef>
-  dag: DAG
 }
 
 export interface Options {

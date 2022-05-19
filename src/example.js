@@ -1,6 +1,6 @@
 /* eslint-disable */
 
-let topology = {
+let spec = {
   resources: {
     elasticCloud: {
       init: () => {},
@@ -21,51 +21,52 @@ let topology = {
       timeout: 10000,
     },
   },
-  dag: {
-    // input: path, storage type (gcs, filesystem)
-    // output: list of paths
-    // artifacts: files in the storage
-    downloadFiles: { deps: [] },
+}
 
-    // input: path, storage type (gcs, filesystem)
-    // output: mongo id pointing to the artifact
-    // artifacts: list of ids (size of 400k)
-    processFile: { deps: ['downloadFiles'] },
+const dag = {
+  // input: path, storage type (gcs, filesystem)
+  // output: list of paths
+  // artifacts: files in the storage
+  downloadFiles: { deps: [] },
 
-    // input: start,end
-    // output: list of ids
-    // artifacts: records in mongo
-    api: { deps: [] },
+  // input: path, storage type (gcs, filesystem)
+  // output: mongo id pointing to the artifact
+  // artifacts: list of ids (size of 400k)
+  processFile: { deps: ['downloadFiles'] },
 
-    // input: list of ids
-    // output: list of ids
-    // artifacts: records in mongo, list of ids
-    // state: { cursor: id }
-    history: { deps: ['api', 'processFile'] },
+  // input: start,end
+  // output: list of ids
+  // artifacts: records in mongo
+  api: { deps: [] },
 
-    // input: list of ids
-    // output: list of ids
-    // artifacts: records in mongo
-    // state: { cursor: id }
-    downloadStuff: { deps: ['api', 'history', 'processFile'] },
+  // input: list of ids
+  // output: list of ids
+  // artifacts: records in mongo, list of ids
+  // state: { cursor: id }
+  history: { deps: ['api', 'processFile'] },
 
-    // input: list of ids
-    // output: list of ids
-    // artifacts: records in mongo
-    // state: { cursor: id }
-    details: { deps: ['downloadStuff'] },
+  // input: list of ids
+  // output: list of ids
+  // artifacts: records in mongo
+  // state: { cursor: id }
+  downloadStuff: { deps: ['api', 'history', 'processFile'] },
 
-    // input: list of ids
-    // output: list of ids
-    // artifacts: records in mongo
-    // state: { cursor: id }
-    attachments: { deps: ['downloadStuff'] },
+  // input: list of ids
+  // output: list of ids
+  // artifacts: records in mongo
+  // state: { cursor: id }
+  details: { deps: ['downloadStuff'] },
 
-    // input: list of ids
-    // artifacts: records in mongo
-    // state: { cursor: id }
-    mongo: { deps: ['details', 'attachments'] },
-  },
+  // input: list of ids
+  // output: list of ids
+  // artifacts: records in mongo
+  // state: { cursor: id }
+  attachments: { deps: ['downloadStuff'] },
+
+  // input: list of ids
+  // artifacts: records in mongo
+  // state: { cursor: id }
+  mongo: { deps: ['details', 'attachments'] },
 }
 
 const { emitter, promise } = runTopology(
@@ -82,16 +83,16 @@ const { emitter, promise } = runTopology(
         async run() {},
       },
     },
-    dag: {
-      api: { deps: [] },
-      details: { deps: ['api'] },
-      history: { deps: ['api'] },
-    },
+  },
+  {
+    api: { deps: [] },
+    details: { deps: ['api'] },
+    history: { deps: ['api'] },
   },
   { excludeNodes: ['api'], data: {} }
 )
 
-resumeTopology(topology, {
+resumeTopology(spec, {
   status: 'running',
   dag: {
     api: { deps: [] },
@@ -118,7 +119,7 @@ resumeTopology(topology, {
       state: {
         id: 3,
       },
-      input: { api: ['123', '456'] },
+      input: [['123', '456']],
     },
   },
 })
@@ -129,8 +130,8 @@ resumeTopology(topology, {
 const perform = async (msg) => {
   const isRedelivery = msg.deliveryCount > 1
   const { emitter, promise } = isRedelivery
-    ? resumeTopology(topology, await loadSnapshotFromMongo(msg))
-    : runTopology(topology, options)
+    ? resumeTopology(spec, await loadSnapshotFromMongo(msg))
+    : runTopology(spec, dag, options)
   emitter.on('data', (snapshot) => {
     // write to mongo
     persistToMongo(snapshot)
@@ -190,7 +191,7 @@ let mongo = {
       },
       // Input should always be a ref when there is a previous stage with an output
       // Output should always be a ref when input === output
-      input: { api: ['123', '456'] },
+      input: [['123', '456']],
     },
   },
 }
