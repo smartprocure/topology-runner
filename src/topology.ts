@@ -7,7 +7,6 @@ import {
   Options,
   Spec,
   SnapshotData,
-  NodeData,
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
@@ -64,10 +63,10 @@ const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
  * Call init on resources.
  */
 const initResources = async (spec: Spec, resources: string[]) => {
-  const readyResources: any[] = await Promise.all(
+  const values: any[] = await Promise.all(
     resources.map((resource) => _.result(['resources', resource, 'init'], spec))
   )
-  return _.zipObj(resources, readyResources)
+  return _.zipObj(resources, values)
 }
 
 /**
@@ -135,11 +134,13 @@ const nodeEventHandler = (
     emitter.emit('data', snapshot)
   }
   const errored = (error: any) => {
+    const date = new Date()
     // Update snapshot
     snapshot.data[node].status = 'errored'
-    snapshot.data[node].finished = new Date()
+    snapshot.data[node].finished = date
     snapshot.status = 'errored'
     snapshot.error = error
+    snapshot.finished = date
     // Emit
     emitter.emit('error', snapshot)
   }
@@ -165,6 +166,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
       if (completed.length === nodes.length) {
         // Update snapshot
         snapshot.status = 'completed'
+        snapshot.finished = new Date()
         // Emit
         emitter.emit('done', snapshot)
         // We're done
@@ -176,7 +178,6 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
       for (const node of readyToRunNodes) {
         // Snapshot updater
         const events = nodeEventHandler(node, snapshot, emitter)
-        const updateStateFn = events.updateState
         // Get the node
         const { run, resources = [] } = spec.nodes[node]
         // Initialize resources for node if needed
@@ -186,6 +187,8 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
         const data = getInputData(dag, node, snapshot.data)
         // Get the subset of resources required for the node
         const reqResources = _.pick(resources, initialized)
+        // Callback to update state
+        const updateStateFn = events.updateState
         // Resume scenario
         const state = snapshot.data[node].state
         // Run fn input
@@ -250,7 +253,12 @@ export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
   // Initialize data
   const data = initData(dag, options)
   // Initial snapshot
-  const snapshot: Snapshot = { status: 'running', dag, data }
+  const snapshot: Snapshot = {
+    status: 'running',
+    started: new Date(),
+    dag,
+    data,
+  }
   // Run the topology
   return _runTopology(spec, snapshot, dag)
 }
@@ -280,9 +288,11 @@ export const resumeTopology = (spec: Spec, snapshot: Snapshot) => {
   const snap: Snapshot = {
     ...snapshot,
     status: 'running',
+    started: new Date(),
     data: setUncompletedNodesToPending(snapshot.data),
   }
   delete snap.error
+  delete snap.finished
   // Run the topology
   return _runTopology(spec, snap, snap.dag)
 }

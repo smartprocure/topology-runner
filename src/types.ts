@@ -34,16 +34,18 @@ export type Status = 'pending' | 'running' | 'completed' | 'errored'
 export interface NodeData {
   status: Status
   started: Date
-  finished: Date
+  finished?: Date
   input: any
-  output: any
-  state: any
+  output?: any
+  state?: any
 }
 
 export type SnapshotData = Record<string, NodeData>
 
 export interface Snapshot {
   status: Status
+  started: Date
+  finished?: Date
   dag: DAG
   data: SnapshotData
   error?: any
