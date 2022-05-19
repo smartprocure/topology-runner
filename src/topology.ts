@@ -7,6 +7,7 @@ import {
   Options,
   Spec,
   SnapshotData,
+  NodeData,
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
@@ -255,13 +256,13 @@ export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
 }
 
 /**
- * Set nodes with status of running to pending.
+ * Set uncompleted nodes to pending.
  */
-const setRunningNodesToPending = _.update(
+const setUncompletedNodesToPending = _.update(
   'data',
-  _.mapValues(({ status, ...obj }) => ({
+  _.mapValues(({ status, ...obj }: NodeData) => ({
     ...obj,
-    status: status === 'running' ? 'pending' : status,
+    status: status !== 'completed' ? 'pending' : status,
   }))
 )
 
@@ -274,8 +275,8 @@ export const resumeTopology = (spec: Spec, snapshot: Snapshot) => {
     const emitter = new EventEmitter<Events>()
     return { emitter, promise: Promise.resolve(snapshot) }
   }
-  // Set status of running nodes to pending
-  const snap = setRunningNodesToPending(snapshot)
+  // Set uncompleted nodes to pending
+  const snap: Snapshot = setUncompletedNodesToPending(snapshot)
   // Run the topology
   return _runTopology(spec, snap, snap.dag)
 }

@@ -31,7 +31,7 @@ export interface Options {
 
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
-interface NodeData {
+export interface NodeData {
   status: Status
   started: Date
   finished: Date
