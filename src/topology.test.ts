@@ -299,7 +299,7 @@ test('getResumeSnapshot', (t) => {
         state: 0,
       },
     },
-    error: new Error('Invalid id: 1'),
+    error: 'Invalid id: 1',
   }
   const snapshot = getResumeSnapshot(errorSnapshot)
   t.like(snapshot, {
@@ -408,7 +408,7 @@ test('resumeTopology', async (t) => {
           },
         },
       },
-      error: new Error('Invalid id: 2'),
+      error: 'Invalid id: 2',
     },
     'error snapshot'
   )

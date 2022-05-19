@@ -140,7 +140,7 @@ const nodeEventHandler = (
     snapshot.data[node].status = 'errored'
     snapshot.data[node].finished = date
     snapshot.status = 'errored'
-    snapshot.error = error
+    snapshot.error = error instanceof Error ? error.message : error
     snapshot.finished = date
     // Emit
     emitter.emit('error', snapshot)
