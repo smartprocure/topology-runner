@@ -102,6 +102,49 @@ const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
   return deps.map((dep) => _.get([dep, 'output'], data))
 }
 
+/**
+ * Update the snapshot when various node-level events take place
+ * and emit the modified snapshot.
+ */
+const nodeEventHandler = (
+  node: string,
+  snapshot: Snapshot,
+  emitter: EventEmitter<Events>
+) => {
+  const updateState = (state: any) => {
+    // Update snapshot
+    snapshot.data[node].state = state
+    // Emit
+    emitter.emit('data', snapshot)
+  }
+  const running = (data: any) => {
+    // Update snapshot
+    snapshot.data[node].started = new Date()
+    snapshot.data[node].input = data
+    snapshot.data[node].status = 'running'
+    // Emit
+    emitter.emit('data', snapshot)
+  }
+  const completed = (output: any) => {
+    // Update snapshot
+    snapshot.data[node].output = output
+    snapshot.data[node].status = 'completed'
+    snapshot.data[node].finished = new Date()
+    // Emit
+    emitter.emit('data', snapshot)
+  }
+  const errored = (error: any) => {
+    // Update snapshot
+    snapshot.data[node].status = 'errored'
+    snapshot.data[node].finished = new Date()
+    snapshot.status = 'errored'
+    snapshot.error = error
+    // Emit
+    emitter.emit('error', snapshot)
+  }
+  return { updateState, running, completed, errored }
+}
+
 const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
   const nodes = Object.keys(dag)
   // Initialized resources
@@ -130,12 +173,9 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
       const readyToRunNodes = getNodesReadyToRun(dag, snapshot.data)
       // Run nodes
       for (const node of readyToRunNodes) {
-        const updateStateFn = (state: any) => {
-          // Update snapshot
-          snapshot.data[node].state = state
-          // Emit
-          emitter.emit('data', snapshot)
-        }
+        // Snapshot updater
+        const events = nodeEventHandler(node, snapshot, emitter)
+        const updateStateFn = events.updateState
         // Get the node
         const { run, resources = [] } = spec.nodes[node]
         // Initialize resources for node if needed
@@ -143,38 +183,19 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
         // Use initial data if node has no dependencies, otherwise, data from
         // completed nodes
         const data = getInputData(dag, node, snapshot.data)
-        // Get the subset of resources needed for the node
-        const pickedResources = _.pick(resources, initialized)
+        // Get the subset of resources required for the node
+        const reqResources = _.pick(resources, initialized)
+        // Resume scenario
+        const state = snapshot.data[node].state
         // Run fn input
-        const runInput = {
-          data,
-          resources: pickedResources,
-          updateStateFn,
-          // Resume scenario
-          state: snapshot.data[node].state,
-        }
-        // Preparing to call run fn
-        snapshot.data[node].started = new Date()
-        snapshot.data[node].input = data
-        snapshot.data[node].status = 'running'
+        const runInput = { data, resources: reqResources, updateStateFn, state }
+        // Update snapshot
+        events.running(data)
         // Call run fn
         promises[node] = run(runInput)
-          .then((output) => {
-            // Update snapshot
-            snapshot.data[node].output = output
-            snapshot.data[node].status = 'completed'
-            snapshot.data[node].finished = new Date()
-            // Emit
-            emitter.emit('data', snapshot)
-          })
+          .then(events.completed)
           .catch((e) => {
-            // Update snapshot
-            snapshot.data[node].status = 'errored'
-            snapshot.data[node].finished = new Date()
-            snapshot.status = 'errored'
-            snapshot.error = e
-            // Emit
-            emitter.emit('error', snapshot)
+            events.errored(e)
             // We're done
             done = true
             reject(e)
