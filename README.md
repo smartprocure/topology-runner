@@ -161,47 +161,22 @@ A successful run of the above will produce a snapshot that looks like this:
   "status": "completed",
   "started": "2022-05-20T17:16:48.531Z",
   "dag": {
-    "api": {
-      "deps": []
-    },
-    "details": {
-      "deps": [
-        "api"
-      ]
-    },
-    "attachments": {
-      "deps": [
-        "api"
-      ]
-    },
-    "writeToDB": {
-      "deps": [
-        "details",
-        "attachments"
-      ]
-    }
+    "api": { "deps": [] },
+    "details": { "deps": [ "api" ] },
+    "attachments": { "deps": [ "api" ] },
+    "writeToDB": { "deps": [ "details", "attachments" ] }
   },
   "data": {
     "api": {
       "started": "2022-05-20T17:16:48.532Z",
       "input": [],
       "status": "completed",
-      "output": [
-        1,
-        2,
-        3
-      ],
+      "output": [ 1, 2, 3 ],
       "finished": "2022-05-20T17:16:48.533Z"
     },
     "details": {
       "started": "2022-05-20T17:16:48.534Z",
-      "input": [
-        [
-          1,
-          2,
-          3
-        ]
-      ],
+      "input": [ [ 1, 2, 3 ] ],
       "status": "completed",
       "state": {
         "index": 2,
@@ -220,13 +195,7 @@ A successful run of the above will produce a snapshot that looks like this:
     },
     "attachments": {
       "started": "2022-05-20T17:16:48.534Z",
-      "input": [
-        [
-          1,
-          2,
-          3
-        ]
-      ],
+      "input": [ [ 1, 2, 3 ] ],
       "status": "completed",
       "state": {
         "index": 2,
