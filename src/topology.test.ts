@@ -11,9 +11,9 @@ import {
   getResumeSnapshot,
   TopologyError,
 } from './topology'
-import { RunFn, Snapshot, Spec } from './types'
+import { DAG, RunFn, Snapshot, Spec } from './types'
 
-const dag = {
+const dag: DAG = {
   api: { deps: [] },
   details: { deps: ['api'] },
   attachments: { deps: ['api'] },
@@ -323,7 +323,7 @@ test('getResumeSnapshot', (t) => {
         state: 0,
       },
     },
-    error: 'Invalid id: 1',
+    error: 'Failed processing id: 1',
   }
   const snapshot = getResumeSnapshot(errorSnapshot)
   t.like(snapshot, {
@@ -384,7 +384,7 @@ test('resumeTopology', async (t) => {
       // Simulate error while processing second element.
       // Error occurs the first time the fn is called.
       if (i === 1 && attempt++ === 1) {
-        throw new Error(`Invalid id: ${id}`)
+        throw new Error(`Failed processing id: ${id}`)
       }
       // Successfully processed so record state
       updateStateFn({ index: i, output })
@@ -432,7 +432,7 @@ test('resumeTopology', async (t) => {
           },
         },
       },
-      error: 'Invalid id: 2',
+      error: 'Failed processing id: 2',
     },
     'error snapshot'
   )

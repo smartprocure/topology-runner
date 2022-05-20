@@ -1,14 +1,15 @@
 {
   "name": "topology-runner",
   "version": "0.0.1",
-  "description": "Run a topology consisting of a directed acyclical graph",
+  "description": "Run a topology consisting of a directed acyclic graph",
   "author": "GovSpend",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "repository": "git://github.com/smartprocure/topology-runner.git",
   "scripts": {
     "prepare": "npm run build",
-    "build": "tsc --declaration",
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc --declaration --project tsconfig.build.json",
     "test": "ava",
     "lint": "eslint src/**"
   },
@@ -16,8 +17,8 @@
     "topology",
     "dag",
     "directed",
-    "acyclical",
-    " graph",
+    "acyclic",
+    "graph",
     "runner"
   ],
   "prettier": {
