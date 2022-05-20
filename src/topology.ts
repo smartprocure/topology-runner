@@ -11,6 +11,10 @@ import {
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
+import makeError from 'make-error'
+
+export const TopologyError = makeError('TopologyError')
+
 /**
  * Remove excludesNodes from DAG and from the dependency lists
  * of nodes.
@@ -157,7 +161,7 @@ export const getMissingSpecNodes = (spec: Spec, dag: DAG) =>
 const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
   const missingSpecNodes = getMissingSpecNodes(spec, dag)
   if (missingSpecNodes.length) {
-    throw new Error(
+    throw new TopologyError(
       `Missing the following nodes in spec: ${missingSpecNodes.join(', ')}`
     )
   }

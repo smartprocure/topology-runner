@@ -9,6 +9,7 @@ import {
   runTopology,
   resumeTopology,
   getResumeSnapshot,
+  TopologyError,
 } from './topology'
 import { RunFn, Snapshot, Spec } from './types'
 
@@ -207,6 +208,29 @@ test('initData', (t) => {
   t.deepEqual(initSnapshotData(dag, {}), {}, 'data empty')
 })
 
+test('runTopology with bad arguments', async (t) => {
+  const dag = {
+    api: { deps: [] },
+    details: { deps: ['api'] },
+    attachments: { deps: ['api'] },
+    writeToDB: { deps: ['details', 'attachments'] },
+  }
+  const spec: Spec = {
+    nodes: {
+      api: {
+        run: async () => [1, 2, 3],
+      },
+      attachments: {
+        run: async () => 2,
+      },
+    },
+  }
+  const error = t.throws(() => runTopology(spec, dag), {
+    instanceOf: TopologyError,
+  })
+  t.is(error?.message, 'Missing the following nodes in spec: details, writeToDB')
+})
+
 test('runTopology', async (t) => {
   const { promise } = runTopology(spec, dag)
   const snapshot = await promise
@@ -351,8 +375,8 @@ test('resumeTopology', async (t) => {
   const attachmentsRun: RunFn = async ({ data, state, updateStateFn }) => {
     // Flatten
     data = data.flat()
-    const ids: number[] = state ? data.slice(state.index) : data
-    ids.sort()
+    // Start from next element if resume scenario
+    const ids: number[] = state ? data.slice(state.index + 1) : data
     const output: Record<number, string> = state ? state.output : {}
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i]
