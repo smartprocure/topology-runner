@@ -1,3 +1,5 @@
+import EventEmitter from 'eventemitter3'
+
 interface Resource<A> {
   init(): Promise<A> | A
 }
@@ -34,6 +36,11 @@ export interface Options {
   data?: any // Fed into starting nodes (i.e., nodes with no dependencies)
 }
 
+export type Response = {
+  emitter: EventEmitter<Events,any>,
+  promise: Promise<Snapshot>,
+  getSnapshot: () => Snapshot
+}
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 export interface NodeData {

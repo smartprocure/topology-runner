@@ -3,9 +3,9 @@
 ## runTopology
 
 ```typescript
-runTopology(spec: Spec, inputDag: DAG, options?: Options) => TopologyResp
+runTopology(spec: Spec, inputDag: DAG, options?: Options) => Response
 
-type TopologyResp = {
+type Response = {
   emitter: EventEmitter<Events,any>,
   promise: Promise<Snapshot>,
   getSnapshot: () => Snapshot
@@ -167,9 +167,9 @@ A successful run of the above will produce a snapshot that looks like this:
 ## resumeTopology
 
 ```typescript
-resumeTopology(spec: Spec, snapshot: Snapshot) => TopologyResp
+resumeTopology(spec: Spec, snapshot: Snapshot) => Response
 
-type TopologyResp = {
+type Response = {
   emitter: EventEmitter<Events,any>,
   promise: Promise<Snapshot>,
   getSnapshot: () => Snapshot

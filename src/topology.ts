@@ -8,6 +8,7 @@ import {
   RunInput,
   Spec,
   SnapshotData,
+  Response,
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
@@ -158,7 +159,7 @@ const nodeEventHandler = (
 export const getMissingSpecNodes = (spec: Spec, dag: DAG) =>
   _.difference(Object.keys(dag), Object.keys(spec.nodes))
 
-const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG) => {
+const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
   const missingSpecNodes = getMissingSpecNodes(spec, dag)
   if (missingSpecNodes.length) {
     throw new TopologyError(
