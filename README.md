@@ -38,6 +38,7 @@ A node must complete in entirety before a node that depends on it will run.
 ```typescript
 import { runTopology } from 'topology-runner'
 import { DAG, Spec } from 'topology-runner/dist/types'
+import _ from 'lodash/fp'
 
 const dag: DAG = {
   api: { deps: [] },
