@@ -158,69 +158,113 @@ A successful run of the above will produce a snapshot that looks like this:
 
 ```json
 {
-  status: 'completed',
-  started: 2022-05-20T16:55:36.696Z,
-  dag: {
-    api: { deps: [] },
-    details: { deps: [ 'api' ] },
-    attachments: { deps: [ 'api' ] },
-    writeToDB: { deps: [ 'details', 'attachments' ] }
-  },
-  data: {
-    api: {
-      started: 2022-05-20T16:55:36.697Z,
-      input: [],
-      status: 'completed',
-      output: [ 1, 2, 3 ],
-      finished: 2022-05-20T16:55:36.698Z
+  "status": "completed",
+  "started": "2022-05-20T17:16:48.531Z",
+  "dag": {
+    "api": {
+      "deps": []
     },
-    details: {
-      started: 2022-05-20T16:55:36.698Z,
-      input: [ [ 1, 2, 3 ] ],
-      status: 'completed',
-      state: {
-        index: 2,
-        output: {
-          '1': 'description 1',
-          '2': 'description 2',
-          '3': 'description 3'
-        }
-      },
-      output: {
-        '1': 'description 1',
-        '2': 'description 2',
-        '3': 'description 3'
-      },
-      finished: 2022-05-20T16:55:36.698Z
+    "details": {
+      "deps": [
+        "api"
+      ]
     },
-    attachments: {
-      started: 2022-05-20T16:55:36.698Z,
-      input: [ [ 1, 2, 3 ] ],
-      status: 'completed',
-      state: {
-        index: 2,
-        output: { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' }
-      },
-      output: { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' },
-      finished: 2022-05-20T16:55:36.698Z
+    "attachments": {
+      "deps": [
+        "api"
+      ]
     },
-    writeToDB: {
-      started: 2022-05-20T16:55:36.698Z,
-      input: [
-        {
-          '1': 'description 1',
-          '2': 'description 2',
-          '3': 'description 3'
-        },
-        { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' }
-      ],
-      status: 'completed',
-      state: { index: 2 },
-      output: undefined,
-      finished: 2022-05-20T16:55:36.699Z
+    "writeToDB": {
+      "deps": [
+        "details",
+        "attachments"
+      ]
     }
   },
-  finished: 2022-05-20T16:55:36.699Z
+  "data": {
+    "api": {
+      "started": "2022-05-20T17:16:48.532Z",
+      "input": [],
+      "status": "completed",
+      "output": [
+        1,
+        2,
+        3
+      ],
+      "finished": "2022-05-20T17:16:48.533Z"
+    },
+    "details": {
+      "started": "2022-05-20T17:16:48.534Z",
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "status": "completed",
+      "state": {
+        "index": 2,
+        "output": {
+          "1": "description 1",
+          "2": "description 2",
+          "3": "description 3"
+        }
+      },
+      "output": {
+        "1": "description 1",
+        "2": "description 2",
+        "3": "description 3"
+      },
+      "finished": "2022-05-20T17:16:48.566Z"
+    },
+    "attachments": {
+      "started": "2022-05-20T17:16:48.534Z",
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "status": "completed",
+      "state": {
+        "index": 2,
+        "output": {
+          "1": "file1.jpg",
+          "2": "file2.jpg",
+          "3": "file3.jpg"
+        }
+      },
+      "output": {
+        "1": "file1.jpg",
+        "2": "file2.jpg",
+        "3": "file3.jpg"
+      },
+      "finished": "2022-05-20T17:16:48.562Z"
+    },
+    "writeToDB": {
+      "started": "2022-05-20T17:16:48.567Z",
+      "input": [
+        {
+          "1": "description 1",
+          "2": "description 2",
+          "3": "description 3"
+        },
+        {
+          "1": "file1.jpg",
+          "2": "file2.jpg",
+          "3": "file3.jpg"
+        }
+      ],
+      "status": "completed",
+      "state": {
+        "index": 2
+      },
+      "finished": "2022-05-20T17:16:48.722Z"
+    }
+  },
+  "finished": "2022-05-20T17:16:48.722Z"
 }
 ```
 
