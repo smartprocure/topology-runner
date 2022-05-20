@@ -38,7 +38,6 @@ A node must complete in entirety before a node that depends on it will run.
 ```typescript
 import { runTopology } from 'topology-runner'
 import { DAG, Spec } from 'topology-runner/dist/types'
-import _ from 'lodash/fp'
 
 const dag: DAG = {
   api: { deps: [] },
@@ -57,7 +56,10 @@ const spec: Spec = {
     },
     config: {
       init() {
-        return { host: 'localhost' }
+        return {
+          detailsHost: 'https://getsomedetails.org',
+          attachmentsHost: 'https://getsomeattachments.com',
+        }
       },
     },
   },
@@ -66,22 +68,73 @@ const spec: Spec = {
       run: async () => [1, 2, 3],
     },
     details: {
-      run: async ({ data }) => {
-        const ids: number[] = data[0]
-        return ids.reduce((acc, n) => _.set(n, `description ${n}`, acc), {})
+      run: async ({ data, state, resources, updateStateFn }) => {
+        data = data.flat()
+        const ids: number[] = state ? data.slice(state.index + 1) : data
+        const output: Record<number, string> = state ? state.output : {}
+
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i]
+          // Simulate work
+          await setTimeout(10)
+          // Real world scenario below
+          // const description = await fetch(resources.detailsHost)
+          output[id] = `description ${id}`
+          // Update the state for resume scenario
+          updateStateFn({ index: i, output })
+        }
+        return output
       },
+      resources: ['config'],
     },
     attachments: {
-      run: async ({ data }) => {
-        const ids: number[] = data[0]
-        return ids.reduce((acc, n) => _.set(n, `file${n}.jpg`, acc), {})
+      run: async ({ data, state, updateStateFn }) => {
+        data = data.flat()
+        const ids: number[] = state ? data.slice(state.index + 1) : data
+        const output: Record<number, string> = state ? state.output : {}
+
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i]
+          // Simulate work
+          await setTimeout(8)
+          // Real world scenario below
+          // const attachment = await fetch(resources.attachmentsHost)
+          output[id] = `file${id}.jpg`
+          // Update the state for resume scenario
+          updateStateFn({ index: i, output })
+        }
+        return output
       },
+      resources: ['config'],
     },
     writeToDB: {
-      run: async ({ data, resources }) => {
-        await resources.mongo.collection('someColl').insertMany(data)
+      // Time out after 5 minutes
+      // Abort signal will abort below causing the promise to reject
+      timeout: 1000 * 60 * 5,
+      run: async ({ data, resources, state, updateStateFn, signal }) => {
+        const [details, attachments] = data
+        const keys = Object.keys(details)
+        const ids = state ? keys.slice(state.index + 1) : keys
+
+        for (let i = 0; i < ids.length; i++) {
+          // Throw if timeout occurred
+          if (signal.aborted) {
+            throw new Error('Timed out')
+          }
+
+          // Simulate work
+          await setTimeout(50)
+          const id = ids[i]
+          const detail = details[id]
+          const attachment = attachments[id]
+          const doc = { detail, attachment }
+          // Write to datastore
+          // await resources.mongo.collection('someColl').insertOne(doc)
+          // Update the state for resume scenario
+          updateStateFn({ index: i })
+        }
       },
-      resources: ['mongo', 'config'],
+      resources: ['mongo'],
     },
   },
 }
@@ -90,10 +143,11 @@ const { emitter, promise } = runTopology(spec, dag)
 
 const persistSnapshot = (snapshot) => {
   // Could be Redis, MongoDB, etc.
-  writeToDataStore(snapshot)
+  // writeToDataStore(snapshot)
+  console.dir(snapshot, { depth: 10 })
 }
 
-// Persist to a destore for resuming. See below.
+// Persist to a datastore for resuming. See below.
 emitter.on('data', persistSnapshot)
 emitter.on('done', persistSnapshot)
 
@@ -104,65 +158,93 @@ A successful run of the above will produce a snapshot that looks like this:
 
 ```json
 {
-  "status": "completed",
-  "started": "2022-05-20T14:44:50.337Z",
-  "dag": {
-    "api": { "deps": [] },
-    "details": { "deps": ["api"] },
-    "attachments": { "deps": ["api"] },
-    "writeToDB": { "deps": ["details", "attachments"] }
+  status: 'completed',
+  started: 2022-05-20T16:55:36.696Z,
+  dag: {
+    api: { deps: [] },
+    details: { deps: [ 'api' ] },
+    attachments: { deps: [ 'api' ] },
+    writeToDB: { deps: [ 'details', 'attachments' ] }
   },
-  "data": {
-    "api": {
-      "started": "2022-05-20T14:44:50.338Z",
-      "input": [],
-      "status": "completed",
-      "output": [1, 2, 3],
-      "finished": "2022-05-20T14:44:50.339Z"
+  data: {
+    api: {
+      started: 2022-05-20T16:55:36.697Z,
+      input: [],
+      status: 'completed',
+      output: [ 1, 2, 3 ],
+      finished: 2022-05-20T16:55:36.698Z
     },
-    "details": {
-      "started": "2022-05-20T14:44:50.339Z",
-      "input": [[1, 2, 3]],
-      "status": "completed",
-      "output": {
-        "1": "description 1",
-        "2": "description 2",
-        "3": "description 3"
-      },
-      "finished": "2022-05-20T14:44:50.339Z"
-    },
-    "attachments": {
-      "started": "2022-05-20T14:44:50.339Z",
-      "input": [[1, 2, 3]],
-      "status": "completed",
-      "output": {
-        "1": "file1.jpg",
-        "2": "file2.jpg",
-        "3": "file3.jpg"
-      },
-      "finished": "2022-05-20T14:44:50.340Z"
-    },
-    "writeToDB": {
-      "started": "2022-05-20T14:44:50.340Z",
-      "input": [
-        {
-          "1": "description 1",
-          "2": "description 2",
-          "3": "description 3"
-        },
-        {
-          "1": "file1.jpg",
-          "2": "file2.jpg",
-          "3": "file3.jpg"
+    details: {
+      started: 2022-05-20T16:55:36.698Z,
+      input: [ [ 1, 2, 3 ] ],
+      status: 'completed',
+      state: {
+        index: 2,
+        output: {
+          '1': 'description 1',
+          '2': 'description 2',
+          '3': 'description 3'
         }
+      },
+      output: {
+        '1': 'description 1',
+        '2': 'description 2',
+        '3': 'description 3'
+      },
+      finished: 2022-05-20T16:55:36.698Z
+    },
+    attachments: {
+      started: 2022-05-20T16:55:36.698Z,
+      input: [ [ 1, 2, 3 ] ],
+      status: 'completed',
+      state: {
+        index: 2,
+        output: { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' }
+      },
+      output: { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' },
+      finished: 2022-05-20T16:55:36.698Z
+    },
+    writeToDB: {
+      started: 2022-05-20T16:55:36.698Z,
+      input: [
+        {
+          '1': 'description 1',
+          '2': 'description 2',
+          '3': 'description 3'
+        },
+        { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' }
       ],
-      "status": "completed",
-      "output": null,
-      "finished": "2022-05-20T14:44:50.340Z"
+      status: 'completed',
+      state: { index: 2 },
+      output: undefined,
+      finished: 2022-05-20T16:55:36.699Z
     }
   },
-  "finished": "2022-05-20T14:44:50.340Z"
+  finished: 2022-05-20T16:55:36.699Z
 }
+```
+
+### Running a subset of a DAG
+
+Sometimes you might want to skip one or more nodes in a DAG.
+Say, for example, the first node downloads a file and the second
+node processes that file. You may want to reprocess the file without
+downloading it again. To do that you can use either the `includeNodes` or
+`excludeNodes` option with some input `data`.
+
+The computed DAG after either including or excluding nodes will be outputted
+with the snapshot, making it easy to resume that topology.
+
+```typescript
+const dag: DAG = {
+  downloadFile: { deps: [] },
+  processFile: { deps: ['download'] },
+}
+
+// Using includeNodes
+runTopology(spec, dag, { includeNodes: ['processFile'], data: ['123', '456'] })
+// Using excludeNodes
+runTopology(spec, dag, { excludeNodes: ['downloadFile'], data: ['123', '456'] })
 ```
 
 ## resumeTopology
