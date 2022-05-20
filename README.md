@@ -2,6 +2,16 @@
 
 ## runTopology
 
+```typescript
+runTopology(spec: Spec, inputDag: DAG, options?: Options) => TopologyResp
+
+type TopologyResp = {
+  emitter: EventEmitter<Events,any>,
+  promise: Promise<Snapshot>,
+  getSnapshot: () => Snashpt
+}
+```
+
 Run a topology consisting of a DAG (directed acyclic graph) and a spec,
 which is a list of nodes that corresponds to the nodes in the DAG.
 
@@ -96,21 +106,21 @@ A successful run of the above will produce a snapshot that looks like this:
   "started": "2022-05-20T14:44:50.337Z",
   "dag": {
     "api": { "deps": [] },
-    "details": { "deps": [ "api" ] },
-    "attachments": { "deps": [ "api" ] },
-    "writeToDB": { "deps": [ "details", "attachments" ] }
+    "details": { "deps": ["api"] },
+    "attachments": { "deps": ["api"] },
+    "writeToDB": { "deps": ["details", "attachments"] }
   },
   "data": {
     "api": {
       "started": "2022-05-20T14:44:50.338Z",
       "input": [],
       "status": "completed",
-      "output": [ 1, 2, 3 ],
+      "output": [1, 2, 3],
       "finished": "2022-05-20T14:44:50.339Z"
     },
     "details": {
       "started": "2022-05-20T14:44:50.339Z",
-      "input": [ [ 1, 2, 3 ] ],
+      "input": [[1, 2, 3]],
       "status": "completed",
       "output": {
         "1": "description 1",
@@ -121,7 +131,7 @@ A successful run of the above will produce a snapshot that looks like this:
     },
     "attachments": {
       "started": "2022-05-20T14:44:50.339Z",
-      "input": [ [ 1, 2, 3 ] ],
+      "input": [[1, 2, 3]],
       "status": "completed",
       "output": {
         "1": "file1.jpg",
@@ -155,6 +165,16 @@ A successful run of the above will produce a snapshot that looks like this:
 
 ## resumeTopology
 
+```typescript
+resumeTopology(spec: Spec, snapshot: Snapshot) => TopologyResp
+
+type TopologyResp = {
+  emitter: EventEmitter<Events,any>,
+  promise: Promise<Snapshot>,
+  getSnapshot: () => Snashpt
+}
+```
+
 Allows you to resume a topology from a previously emitted snapshot.
 Each node should maintain its state via the `updateStateFn` callback.
 
@@ -174,21 +194,21 @@ for a resume node design pattern.
   "started": "2022-05-20T14:47:47.372Z",
   "dag": {
     "api": { "deps": [] },
-    "details": { "deps": [ "api" ] },
-    "attachments": { "deps": [ "api" ] },
-    "writeToDB": { "deps": [ "details", "attachments" ] }
+    "details": { "deps": ["api"] },
+    "attachments": { "deps": ["api"] },
+    "writeToDB": { "deps": ["details", "attachments"] }
   },
   "data": {
     "api": {
       "started": "2022-05-20T14:47:47.373Z",
       "input": [],
       "status": "completed",
-      "output": [ 1, 2, 3 ],
+      "output": [1, 2, 3],
       "finished": "2022-05-20T14:47:47.373Z"
     },
     "details": {
       "started": "2022-05-20T14:47:47.373Z",
-      "input": [ [ 1, 2, 3 ] ],
+      "input": [[1, 2, 3]],
       "status": "completed",
       "output": {
         "1": "description 1",
@@ -199,7 +219,7 @@ for a resume node design pattern.
     },
     "attachments": {
       "started": "2022-05-20T14:47:47.373Z",
-      "input": [ [ 1, 2, 3 ] ],
+      "input": [[1, 2, 3]],
       "status": "errored",
       "state": {
         "index": 0,
