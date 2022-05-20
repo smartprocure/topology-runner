@@ -1,2 +1,1 @@
-import { runTopology, resumeTopology } from './topology'
-export default { runTopology, resumeTopology }
+export { runTopology, resumeTopology } from './topology'
