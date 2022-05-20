@@ -8,7 +8,7 @@ runTopology(spec: Spec, inputDag: DAG, options?: Options) => TopologyResp
 type TopologyResp = {
   emitter: EventEmitter<Events,any>,
   promise: Promise<Snapshot>,
-  getSnapshot: () => Snashpt
+  getSnapshot: () => Snapshot
 }
 ```
 
@@ -172,7 +172,7 @@ resumeTopology(spec: Spec, snapshot: Snapshot) => TopologyResp
 type TopologyResp = {
   emitter: EventEmitter<Events,any>,
   promise: Promise<Snapshot>,
-  getSnapshot: () => Snashpt
+  getSnapshot: () => Snapshot
 }
 ```
 
