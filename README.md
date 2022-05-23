@@ -36,8 +36,7 @@ when a node's dependencies are met it will be run. Data does does not flow incre
 A node must complete in entirety before a node that depends on it will run.
 
 ```typescript
-import { runTopology } from 'topology-runner'
-import { DAG, Spec } from 'topology-runner/dist/types'
+import { runTopology, DAG, Spec } from 'topology-runner'
 
 const dag: DAG = {
   api: { deps: [] },
