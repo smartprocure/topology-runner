@@ -12,6 +12,7 @@ import {
   TopologyError,
 } from './topology'
 import { DAG, RunFn, Snapshot, Spec } from './types'
+import { setTimeout } from 'node:timers/promises'
 
 const dag: DAG = {
   api: { deps: [] },
@@ -242,6 +243,30 @@ describe('runTopology', () => {
         'Missing the following nodes in spec: details, writeToDB'
       )
     )
+  })
+  test('timeout', async () => {
+    const dag = {
+      api: { deps: [] },
+      details: { deps: ['api'] },
+    }
+    const spec: Spec = {
+      nodes: {
+        api: {
+          run: async ({ signal }) => {
+            await setTimeout(500)
+            if (signal.aborted) {
+              throw new Error('Timeout')
+            }
+          },
+          timeout: 250,
+        },
+        details: {
+          run: async () => 'foo',
+        },
+      },
+    }
+    const { promise } = runTopology(spec, dag)
+    await expect(promise).rejects.toThrow('Timeout')
   })
   test('completed', async () => {
     const { promise } = runTopology(spec, dag)
