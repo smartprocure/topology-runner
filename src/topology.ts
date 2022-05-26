@@ -324,11 +324,12 @@ export const getResumeSnapshot = (snapshot: Snapshot) => {
 /**
  * Resume a topology from a previous snapshot.
  */
-export const resumeTopology = (spec: Spec, snapshot: Snapshot) => {
+export const resumeTopology = (spec: Spec, snapshot: Snapshot): Response => {
   // Ensures resumption is idempotent
   if (snapshot.status === 'completed') {
     const emitter = new EventEmitter<Events>()
-    return { emitter, promise: Promise.resolve(snapshot) }
+    const getSnapshot = () => snapshot
+    return { emitter, promise: Promise.resolve(snapshot), getSnapshot }
   }
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)
