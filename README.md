@@ -37,6 +37,7 @@ A node must complete in entirety before a node that depends on it will run.
 
 ```typescript
 import { runTopology, DAG, Spec } from 'topology-runner'
+import { setTimeout } from 'node:timers/promises'
 
 const dag: DAG = {
   api: { deps: [] },
