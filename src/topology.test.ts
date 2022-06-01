@@ -449,7 +449,7 @@ describe('getResumeSnapshot', () => {
 
 describe('resumeTopology', () => {
   let attempt = 1
-  const attachmentsRun: RunFn = async ({ data, state, updateStateFn }) => {
+  const attachmentsRun: RunFn = async ({ data, state, updateState }) => {
     // Flatten
     data = data.flat()
     // Start from next element if resume scenario
@@ -464,7 +464,7 @@ describe('resumeTopology', () => {
         throw new Error(`Failed processing id: ${id}`)
       }
       // Successfully processed so record state
-      updateStateFn({ index: i, output })
+      updateState({ index: i, output })
     }
     return output
   }

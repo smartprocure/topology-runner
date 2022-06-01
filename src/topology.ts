@@ -223,7 +223,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         // Get the subset of resources required for the node
         const reqResources = _.pick(resources, initialized)
         // Callback to update state
-        const updateStateFn = events.updateState
+        const updateState = events.updateState
         // Resume scenario
         const state = snapshot.data[node]?.state
         // Abort after timeout
@@ -238,7 +238,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         const runInput: RunInput = {
           data,
           resources: reqResources,
-          updateStateFn,
+          updateState,
           state,
           signal: abortController.signal,
         }

@@ -21,7 +21,7 @@ Nodes have a `run` fn that takes an object with the following shape:
 interface RunInput {
   resources: Record<string, any>
   data: any
-  updateStateFn: UpdateStateFn
+  updateState: UpdateState
   state?: any
   signal: AbortSignal
 }
@@ -68,7 +68,7 @@ const spec: Spec = {
       run: async () => [1, 2, 3],
     },
     details: {
-      run: async ({ data, state, resources, updateStateFn }) => {
+      run: async ({ data, state, resources, updateState }) => {
         data = data.flat()
         const ids: number[] = state ? data.slice(state.index + 1) : data
         const output: Record<number, string> = state ? state.output : {}
@@ -81,14 +81,14 @@ const spec: Spec = {
           // const description = await fetch(resources.detailsHost)
           output[id] = `description ${id}`
           // Update the state for resume scenario
-          updateStateFn({ index: i, output })
+          updateState({ index: i, output })
         }
         return output
       },
       resources: ['config'],
     },
     attachments: {
-      run: async ({ data, state, updateStateFn }) => {
+      run: async ({ data, state, updateState }) => {
         data = data.flat()
         const ids: number[] = state ? data.slice(state.index + 1) : data
         const output: Record<number, string> = state ? state.output : {}
@@ -101,7 +101,7 @@ const spec: Spec = {
           // const attachment = await fetch(resources.attachmentsHost)
           output[id] = `file${id}.jpg`
           // Update the state for resume scenario
-          updateStateFn({ index: i, output })
+          updateState({ index: i, output })
         }
         return output
       },
@@ -111,7 +111,7 @@ const spec: Spec = {
       // Time out after 5 minutes
       // Abort signal will abort below causing the promise to reject
       timeout: 1000 * 60 * 5,
-      run: async ({ data, resources, state, updateStateFn, signal }) => {
+      run: async ({ data, resources, state, updateState, signal }) => {
         const [details, attachments] = data
         const keys = Object.keys(details)
         const ids = state ? keys.slice(state.index + 1) : keys
@@ -131,7 +131,7 @@ const spec: Spec = {
           // Write to datastore
           // await resources.mongo.collection('someColl').insertOne(doc)
           // Update the state for resume scenario
-          updateStateFn({ index: i })
+          updateState({ index: i })
         }
       },
       resources: ['mongo'],
@@ -273,7 +273,7 @@ type Response = {
 ```
 
 Allows you to resume a topology from a previously emitted snapshot.
-Each node should maintain its state via the `updateStateFn` callback.
+Each node should maintain its state via the `updateState` callback.
 
 ```typescript
 import { resumeTopology } from 'topology-runner'

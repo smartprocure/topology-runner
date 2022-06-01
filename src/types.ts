@@ -6,13 +6,13 @@ interface Resource<A> {
 }
 
 type ResourceInitializers = Record<string, Resource<any>>
-type UpdateStateFn = (state: any) => void
+type UpdateState = (state: any) => void
 export type Initialized = Record<string, any>
 
 export interface RunInput {
   resources: Record<string, any>
   data: any
-  updateStateFn: UpdateStateFn
+  updateState: UpdateState
   state?: any
   signal: AbortSignal
 }
