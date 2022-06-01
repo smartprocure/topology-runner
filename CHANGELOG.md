@@ -1,3 +1,7 @@
+# 0.0.4
+
+* Added `cleanup` fn for resources that will run when the topology terminates.
+
 # 0.0.3
 
 * Consist result type for `resumeTopology`.

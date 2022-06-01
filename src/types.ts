@@ -2,10 +2,12 @@ import EventEmitter from 'eventemitter3'
 
 interface Resource<A> {
   init(): Promise<A> | A
+  cleanup?(resource: A): Promise<void> | void
 }
 
 type ResourceInitializers = Record<string, Resource<any>>
 type UpdateStateFn = (state: any) => void
+export type Initialized = Record<string, any>
 
 export interface RunInput {
   resources: Record<string, any>
@@ -63,6 +65,6 @@ export interface Snapshot {
   error?: any
 }
 
-export type ObjectOfPromises = Record<string, Promise<any>>
+export type ObjectOfPromises = Record<string | number, Promise<any>>
 
 export type Events = 'data' | 'error' | 'done'

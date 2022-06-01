@@ -10,6 +10,7 @@ import {
   resumeTopology,
   getResumeSnapshot,
   TopologyError,
+  cleanupResources,
 } from './topology'
 import { DAG, RunFn, Snapshot, Spec } from './types'
 import { setTimeout } from 'node:timers/promises'
@@ -138,6 +139,42 @@ describe('initResources', () => {
       mongoDb: 'mongo',
       config: { host: 'localhost' },
     })
+  })
+})
+
+describe('cleanupResources', () => {
+  test('clean up initialized resources', async () => {
+    const cleanedUp: any[] = []
+    const cleanup = (x: any) => {
+      cleanedUp.push(x)
+    }
+
+    const spec: Spec = {
+      resources: {
+        elasticCloud: {
+          init: async () => 'elastic',
+          cleanup: async (x: any) => cleanup(x),
+        },
+        mongoDb: {
+          init: async () => 'mongo',
+          cleanup: (x: any) => cleanup(x),
+        },
+        config: {
+          init() {
+            return { host: 'localhost' }
+          },
+        },
+      },
+      nodes: {},
+    }
+
+    const initialized = await initResources(spec, [
+      'elasticCloud',
+      'mongoDb',
+      'config',
+    ])
+    await cleanupResources(spec, initialized)
+    expect(cleanedUp).toEqual([ 'elastic', 'mongo' ])
   })
 })
 

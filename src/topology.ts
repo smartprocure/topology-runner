@@ -9,6 +9,7 @@ import {
   Spec,
   SnapshotData,
   Response,
+  Initialized,
 } from './types'
 import { missingKeys, findKeys, raceObject } from './util'
 import EventEmitter from 'eventemitter3'
@@ -68,10 +69,24 @@ export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
  * Call init on resources.
  */
 export const initResources = async (spec: Spec, resources: string[]) => {
-  const values: any[] = await Promise.all(
-    resources.map((resource) => _.result(['resources', resource, 'init'], spec))
+  const values = await Promise.all(
+    resources.map((resource) => spec?.resources?.[resource]?.init())
   )
   return _.zipObj(resources, values)
+}
+
+/**
+ * Call cleanup on resources.
+ */
+export const cleanupResources = (spec: Spec, initialized: Initialized) => {
+  const ps = []
+  for (const [key, val] of Object.entries(initialized)) {
+    const cleanupFn = spec?.resources?.[key]?.cleanup
+    if (cleanupFn) {
+      ps.push(cleanupFn(val))
+    }
+  }
+  return Promise.all(ps)
 }
 
 /**
@@ -81,7 +96,7 @@ export const initResources = async (spec: Spec, resources: string[]) => {
 const initMissingResources = async (
   spec: Spec,
   resources: string[],
-  initialized: Record<string, any>
+  initialized: Initialized
 ) => {
   const missing = missingKeys(resources, initialized)
   if (missing) {
@@ -168,7 +183,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
   }
   const nodes = Object.keys(dag)
   // Initialized resources
-  const initialized: Record<string, any> = {}
+  const initialized: Initialized = {}
   // Track node promises
   const promises: ObjectOfPromises = {}
   const emitter = new EventEmitter<Events>()
@@ -187,6 +202,8 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         snapshot.finished = new Date()
         // Emit
         emitter.emit('done', snapshot)
+        // Cleanup initialized resources
+        await cleanupResources(spec, initialized)
         // We're done
         return resolve(snapshot)
       }
@@ -242,6 +259,8 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
       // We run this code after awaiting to allow for the promise.catch
       // callback to execute.
       if (done) {
+        // Cleanup initialized resources
+        await cleanupResources(spec, initialized)
         return
       }
       // Don't track the resolved promise anymore
