@@ -1,3 +1,7 @@
+# 0.0.5
+
+* Changed `updateStateFn` to `updateState`.
+
 # 0.0.4
 
 * Added `cleanup` fn for resources that will run when the topology terminates.

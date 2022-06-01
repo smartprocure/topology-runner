@@ -1,6 +1,6 @@
 {
   "name": "topology-runner",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Run a topology consisting of a directed acyclic graph",
   "author": "GovSpend",
   "main": "dist/index.js",
