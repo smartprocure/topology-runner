@@ -174,7 +174,7 @@ describe('cleanupResources', () => {
       'config',
     ])
     await cleanupResources(spec, initialized)
-    expect(cleanedUp).toEqual([ 'elastic', 'mongo' ])
+    expect(cleanedUp).toEqual(['elastic', 'mongo'])
   })
 })
 
@@ -256,6 +256,73 @@ describe('initData', () => {
 })
 
 describe('runTopology', () => {
+  test('nodes receive expected input', async () => {
+    const dag = {
+      api: { deps: [] },
+      details: { deps: ['api'] },
+    }
+    const spec: Spec = {
+      resources: {
+        elasticCloud: {
+          init: async () => 'elastic',
+        },
+        mongoDb: {
+          init: async () => 'mongo',
+        },
+      },
+      nodes: {
+        api: {
+          run: async ({ data, resources, meta }) => ({ data, resources, meta }),
+          resources: ['elasticCloud'],
+        },
+        details: {
+          run: async ({ data, resources, meta }) => ({ data, resources, meta }),
+          resources: ['mongoDb'],
+        },
+      },
+    }
+    const data = [1, 2, 3]
+    const meta = { launchMissleCode: 1234 }
+    const { promise, getSnapshot } = runTopology(spec, dag, { data, meta })
+    await promise
+    expect(getSnapshot()).toMatchObject({
+      status: 'completed',
+      dag: { api: { deps: [] }, details: { deps: ['api'] } },
+      data: {
+        api: {
+          input: [1, 2, 3],
+          status: 'completed',
+          output: {
+            data: [1, 2, 3],
+            resources: { elasticCloud: 'elastic' },
+            meta: { launchMissleCode: 1234 },
+          },
+        },
+        details: {
+          input: [
+            {
+              data: [1, 2, 3],
+              resources: { elasticCloud: 'elastic' },
+              meta: { launchMissleCode: 1234 },
+            },
+          ],
+          status: 'completed',
+          output: {
+            data: [
+              {
+                data: [1, 2, 3],
+                resources: { elasticCloud: 'elastic' },
+                meta: { launchMissleCode: 1234 },
+              },
+            ],
+            resources: { mongoDb: 'mongo' },
+            meta: { launchMissleCode: 1234 },
+          },
+        },
+      },
+      meta: { launchMissleCode: 1234 },
+    })
+  })
   test('bad arguments', () => {
     const dag = {
       api: { deps: [] },

@@ -1,3 +1,7 @@
+# 0.0.6
+
+* Added `meta` option for `runTopology`.
+
 # 0.0.5
 
 * Changed `updateStateFn` to `updateState`.

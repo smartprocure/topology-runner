@@ -15,6 +15,7 @@ export interface RunInput {
   updateState: UpdateState
   state?: any
   signal: AbortSignal
+  meta?: any
 }
 
 type Millis = number
@@ -36,6 +37,7 @@ export interface Options {
   includeNodes?: string[]
   excludeNodes?: string[]
   data?: any // Fed into starting nodes (i.e., nodes with no dependencies)
+  meta?: any // Fed to all nodes
 }
 
 export type Response = {
@@ -63,6 +65,7 @@ export interface Snapshot {
   dag: DAG
   data: SnapshotData
   error?: any
+  meta?: any
 }
 
 export type ObjectOfPromises = Record<string | number, Promise<any>>
