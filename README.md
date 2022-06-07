@@ -24,6 +24,7 @@ interface RunInput {
   updateState: UpdateState
   state?: any
   signal: AbortSignal
+  meta?: any
 }
 ```
 
