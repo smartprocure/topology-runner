@@ -241,7 +241,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
           updateState,
           state,
           signal: abortController.signal,
-          meta: snapshot?.meta
+          options: snapshot?.options,
         }
         // Update snapshot
         events.running(data)
@@ -313,7 +313,7 @@ export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
     started: new Date(),
     dag,
     data,
-    meta: options?.meta
+    options,
   }
   // Run the topology
   return _runTopology(spec, snapshot, dag)

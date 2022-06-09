@@ -15,7 +15,7 @@ export interface RunInput {
   updateState: UpdateState
   state?: any
   signal: AbortSignal
-  meta?: any
+  options?: Options
 }
 
 type Millis = number
@@ -41,8 +41,8 @@ export interface Options {
 }
 
 export type Response = {
-  emitter: EventEmitter<Events,any>,
-  promise: Promise<Snapshot>,
+  emitter: EventEmitter<Events, any>
+  promise: Promise<Snapshot>
   getSnapshot: () => Snapshot
 }
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
@@ -65,7 +65,7 @@ export interface Snapshot {
   dag: DAG
   data: SnapshotData
   error?: any
-  meta?: any
+  options?: Options
 }
 
 export type ObjectOfPromises = Record<string | number, Promise<any>>

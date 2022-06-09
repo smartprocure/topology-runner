@@ -272,11 +272,19 @@ describe('runTopology', () => {
       },
       nodes: {
         api: {
-          run: async ({ data, resources, meta }) => ({ data, resources, meta }),
+          run: async ({ data, resources, options }) => ({
+            data,
+            resources,
+            options,
+          }),
           resources: ['elasticCloud'],
         },
         details: {
-          run: async ({ data, resources, meta }) => ({ data, resources, meta }),
+          run: async ({ data, resources, options }) => ({
+            data,
+            resources,
+            options,
+          }),
           resources: ['mongoDb'],
         },
       },
@@ -295,7 +303,7 @@ describe('runTopology', () => {
           output: {
             data: [1, 2, 3],
             resources: { elasticCloud: 'elastic' },
-            meta: { launchMissleCode: 1234 },
+            options: { meta: { launchMissleCode: 1234 } },
           },
         },
         details: {
@@ -303,7 +311,7 @@ describe('runTopology', () => {
             {
               data: [1, 2, 3],
               resources: { elasticCloud: 'elastic' },
-              meta: { launchMissleCode: 1234 },
+              options: { meta: { launchMissleCode: 1234 } },
             },
           ],
           status: 'completed',
@@ -312,15 +320,15 @@ describe('runTopology', () => {
               {
                 data: [1, 2, 3],
                 resources: { elasticCloud: 'elastic' },
-                meta: { launchMissleCode: 1234 },
+                options: { meta: { launchMissleCode: 1234 } },
               },
             ],
             resources: { mongoDb: 'mongo' },
-            meta: { launchMissleCode: 1234 },
+            options: { meta: { launchMissleCode: 1234 } },
           },
         },
       },
-      meta: { launchMissleCode: 1234 },
+      options: { meta: { launchMissleCode: 1234 } },
     })
   })
   test('bad arguments', () => {
