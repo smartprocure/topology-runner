@@ -1,26 +1,5 @@
 import { describe, expect, test } from '@jest/globals'
-import { setTimeout } from 'node:timers/promises'
-import { missingKeys, findKeys, raceObject } from './util'
-import { ObjectOfPromises } from './types'
-
-describe('raceObject', () => {
-  test('return key of first resolved', async () => {
-    const promises: ObjectOfPromises = {
-      tom: setTimeout(250),
-      joe: setTimeout(350),
-      frank: setTimeout(100),
-    }
-    expect(await raceObject(promises)).toBe('frank')
-  })
-  test('return key of first rejected', async () => {
-    const promises: ObjectOfPromises = {
-      tom: setTimeout(250),
-      joe: Promise.reject('fail'),
-      frank: setTimeout(100),
-    }
-    await expect(raceObject(promises)).rejects.toBe('fail')
-  })
-})
+import { missingKeys, findKeys } from './util'
 
 describe('findKeys', () => {
   test('should find keys', () => {

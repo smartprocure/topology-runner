@@ -1,16 +1,4 @@
 import _ from 'lodash/fp'
-import { ObjectOfPromises } from './types'
-
-/**
- * Return the key of the first promise from the object that resolves.
- */
-export const raceObject = async (obj: ObjectOfPromises): Promise<string> => {
-  const objToArr = _.flow(
-    _.toPairs,
-    _.map(([key, prom]) => prom.then(() => key))
-  )
-  return Promise.race(objToArr(obj))
-}
 
 /**
  * Find keys where values match pred. pred can be a lodash iteratee.

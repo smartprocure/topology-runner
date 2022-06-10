@@ -370,7 +370,7 @@ describe('runTopology', () => {
       },
     }
     const { promise } = runTopology(spec, dag)
-    await expect(promise).rejects.toThrow('Timeout')
+    await expect(promise).rejects.toThrow('Errored nodes: ["api"]')
   })
   test('completed', async () => {
     const { promise } = runTopology(spec, dag)
@@ -466,7 +466,6 @@ describe('getResumeSnapshot', () => {
           state: 0,
         },
       },
-      error: 'Failed processing id: 1',
     }
     const snapshot = getResumeSnapshot(errorSnapshot)
     expect(snapshot).toMatchObject({
@@ -539,7 +538,7 @@ describe('resumeTopology', () => {
 
   test('resume after initial error', async () => {
     const { promise, getSnapshot } = runTopology(modifiedSpec, dag)
-    await expect(promise).rejects.toThrow('Failed processing id: 2')
+    await expect(promise).rejects.toThrow('Errored nodes: ["attachments"]')
     const snapshot = getSnapshot()
     expect(snapshot).toMatchObject({
       status: 'errored',
@@ -567,6 +566,7 @@ describe('resumeTopology', () => {
         attachments: {
           input: [[1, 2, 3]],
           status: 'errored',
+          error: 'Error: Failed processing id: 2',
           state: {
             index: 0,
             output: {
@@ -575,7 +575,6 @@ describe('resumeTopology', () => {
           },
         },
       },
-      error: 'Failed processing id: 2',
     })
     const { promise: resumeProm } = await resumeTopology(modifiedSpec, snapshot)
     const resumeSnapshot = await resumeProm

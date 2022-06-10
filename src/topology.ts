@@ -11,7 +11,7 @@ import {
   Response,
   Initialized,
 } from './types'
-import { missingKeys, findKeys, raceObject } from './util'
+import { missingKeys, findKeys } from './util'
 import EventEmitter from 'eventemitter3'
 import makeError from 'make-error'
 
@@ -54,6 +54,7 @@ export const filterDAG = (dag: DAG, options: Options = {}): DAG => {
 export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
   const completed = findKeys({ status: 'completed' }, data)
   const running = findKeys({ status: 'running' }, data)
+  const errored = findKeys({ status: 'errored' }, data)
   const nodes: string[] = []
   for (const node in dag) {
     const { deps } = dag[node]
@@ -62,7 +63,7 @@ export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
     }
   }
   // Exclude nodes that have already completed or are running
-  return _.difference(nodes, [...completed, ...running])
+  return _.difference(nodes, [...completed, ...running, ...errored])
 }
 
 /**
@@ -151,19 +152,15 @@ const nodeEventHandler = (
     snapshot.data[node].output = output
     snapshot.data[node].status = 'completed'
     snapshot.data[node].finished = new Date()
+    delete snapshot.data[node].error
     // Emit
     emitter.emit('data', snapshot)
   }
   const errored = (error: any) => {
-    const date = new Date()
     // Update snapshot
     snapshot.data[node].status = 'errored'
-    snapshot.data[node].finished = date
-    snapshot.status = 'errored'
-    snapshot.error = error instanceof Error ? error.message : error
-    snapshot.finished = date
-    // Emit
-    emitter.emit('error', snapshot)
+    snapshot.data[node].finished = new Date()
+    snapshot.data[node].error = error.toString()
   }
   return { updateState, running, completed, errored }
 }
@@ -181,34 +178,36 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
       `Missing the following nodes in spec: ${missingSpecNodes.join(', ')}`
     )
   }
-  const nodes = Object.keys(dag)
   // Initialized resources
   const initialized: Initialized = {}
   // Track node promises
   const promises: ObjectOfPromises = {}
   const emitter = new EventEmitter<Events>()
-  let done = false
   // Emit
   emitter.emit('data', snapshot)
 
-  const promise = new Promise<Snapshot>(async (resolve, reject) => {
+  const run = async () => {
     while (true) {
-      // Get completed nodes
-      const completed = findKeys({ status: 'completed' }, snapshot.data)
-      // All nodes have completed
-      if (completed.length === nodes.length) {
+      // Get nodes with resolved dependencies that have not been run
+      const readyToRunNodes = getNodesReadyToRun(dag, snapshot.data)
+
+      // There is no more work to be done
+      if (_.isEmpty(readyToRunNodes) && _.isEmpty(promises)) {
+        const errored = findKeys({ status: 'errored' }, snapshot.data)
+        const hasErrors = !_.isEmpty(errored)
         // Update snapshot
-        snapshot.status = 'completed'
+        snapshot.status = hasErrors ? 'errored' : 'completed'
         snapshot.finished = new Date()
         // Emit
-        emitter.emit('done', snapshot)
+        emitter.emit(hasErrors ? 'error' : 'done', snapshot)
         // Cleanup initialized resources
         await cleanupResources(spec, initialized)
         // We're done
-        return resolve(snapshot)
+        if (hasErrors)
+          throw new TopologyError(`Errored nodes: ${JSON.stringify(errored)}`)
+        return snapshot
       }
-      // Get nodes with resolved dependencies that have not been run
-      const readyToRunNodes = getNodesReadyToRun(dag, snapshot.data)
+
       // Run nodes
       for (const node of readyToRunNodes) {
         // Snapshot updater
@@ -241,36 +240,27 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
           updateState,
           state,
           signal: abortController.signal,
-          meta: snapshot?.meta
+          meta: snapshot?.meta,
         }
         // Update snapshot
         events.running(data)
         // Call run fn
         promises[node] = run(runInput)
           .then(events.completed)
-          .catch((e) => {
-            events.errored(e)
-            // We're done
-            done = true
-            reject(e)
+          .catch(events.errored)
+          .finally(() => {
+            delete promises[node]
           })
       }
+
       // Wait for a promise to resolve
-      const node = await raceObject(promises)
-      // We run this code after awaiting to allow for the promise.catch
-      // callback to execute.
-      if (done) {
-        // Cleanup initialized resources
-        await cleanupResources(spec, initialized)
-        return
-      }
-      // Don't track the resolved promise anymore
-      delete promises[node]
+      await Promise.race(_.values(promises))
     }
-  })
+  }
+
   const getSnapshot = () => snapshot
 
-  return { emitter, promise, getSnapshot }
+  return { emitter, promise: run(), getSnapshot }
 }
 
 /*
@@ -313,7 +303,7 @@ export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
     started: new Date(),
     dag,
     data,
-    meta: options?.meta
+    meta: options?.meta,
   }
   // Run the topology
   return _runTopology(spec, snapshot, dag)
@@ -338,7 +328,6 @@ export const getResumeSnapshot = (snapshot: Snapshot) => {
     started: new Date(),
     data: resetUncompletedNodes(snapshot.data),
   }
-  delete snap.error
   delete snap.finished
   return snap
 }
