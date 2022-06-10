@@ -1,3 +1,7 @@
+# 0.1.0
+
+* Nodes run to completion in parallel with failed nodes.
+
 # 0.0.6
 
 * Added `meta` option for `runTopology`.
