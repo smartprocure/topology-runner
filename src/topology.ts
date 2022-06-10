@@ -48,22 +48,21 @@ export const filterDAG = (dag: DAG, options: Options = {}): DAG => {
 }
 
 /**
- * Get a list of nodes where all dependencies have completed.
- * Excludes nodes that have already completed or are running.
+ * Get a list of nodes where all dependencies have completed and the
+ * node's status is pending.
  */
 export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
   const completed = findKeys({ status: 'completed' }, data)
-  const running = findKeys({ status: 'running' }, data)
-  const errored = findKeys({ status: 'errored' }, data)
   const nodes: string[] = []
   for (const node in dag) {
     const { deps } = dag[node]
-    if (_.difference(deps, completed).length === 0) {
+    // The status is not set for the node on the snapshot or status is pending
+    const isPending = !data[node]?.status || data[node]?.status === 'pending'
+    if (_.difference(deps, completed).length === 0 && isPending) {
       nodes.push(node)
     }
   }
-  // Exclude nodes that have already completed or are running
-  return _.difference(nodes, [...completed, ...running, ...errored])
+  return nodes
 }
 
 /**
@@ -202,9 +201,9 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
         // Cleanup initialized resources
         await cleanupResources(spec, initialized)
-        // We're done
-        if (hasErrors)
+        if (hasErrors) {
           throw new TopologyError(`Errored nodes: ${JSON.stringify(errored)}`)
+        }
         return snapshot
       }
 

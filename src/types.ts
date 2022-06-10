@@ -48,7 +48,7 @@ export type Response = {
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 export interface NodeData {
-  status: Status
+  status?: Status
   started?: Date
   finished?: Date
   input: any

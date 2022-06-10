@@ -88,6 +88,19 @@ describe('getNodesReadyToRun', () => {
     attachments: { deps: ['api'] },
     writeToDB: { deps: ['details', 'attachments'] },
   }
+  test('resume - pending', () => {
+    const nodes = getNodesReadyToRun(dag, {
+      api: {
+        status: 'pending',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: {
+          startDate: '2020-01-01',
+          endDate: '2020-12-31',
+        },
+      },
+    })
+    expect(nodes).toEqual(['api'])
+  })
   test('deps met - exclude completed', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
@@ -123,9 +136,54 @@ describe('getNodesReadyToRun', () => {
     })
     expect(nodes).toEqual(['attachments'])
   })
+  test('deps met - exclude completed and errored', () => {
+    const nodes = getNodesReadyToRun(dag, {
+      api: {
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: {
+          startDate: '2020-01-01',
+          endDate: '2020-12-31',
+        },
+        output: ['123', '456'],
+      },
+      details: {
+        status: 'errored',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: [['123', '456']],
+      },
+    })
+    expect(nodes).toEqual(['attachments'])
+  })
+  test('deps not met', () => {
+    const nodes = getNodesReadyToRun(dag, {
+      api: {
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: {
+          startDate: '2020-01-01',
+          endDate: '2020-12-31',
+        },
+        output: ['123', '456'],
+      },
+      details: {
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: [['123', '456']],
+        output: { '123': 'foo', '456': 'bar' },
+      },
+      attachments: {
+        status: 'errored',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: [['123', '456']],
+      },
+    })
+    expect(nodes).toEqual([])
+  })
   test('empty deps', () => {
     const nodes = getNodesReadyToRun(dag, {})
-
     expect(nodes).toEqual(['api'])
   })
 })
