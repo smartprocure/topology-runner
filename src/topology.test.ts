@@ -88,6 +88,19 @@ describe('getNodesReadyToRun', () => {
     attachments: { deps: ['api'] },
     writeToDB: { deps: ['details', 'attachments'] },
   }
+  test('resume - pending', () => {
+    const nodes = getNodesReadyToRun(dag, {
+      api: {
+        status: 'pending',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: {
+          startDate: '2020-01-01',
+          endDate: '2020-12-31',
+        },
+      },
+    })
+    expect(nodes).toEqual(['api'])
+  })
   test('deps met - exclude completed', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
@@ -123,9 +136,54 @@ describe('getNodesReadyToRun', () => {
     })
     expect(nodes).toEqual(['attachments'])
   })
+  test('deps met - exclude completed and errored', () => {
+    const nodes = getNodesReadyToRun(dag, {
+      api: {
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: {
+          startDate: '2020-01-01',
+          endDate: '2020-12-31',
+        },
+        output: ['123', '456'],
+      },
+      details: {
+        status: 'errored',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: [['123', '456']],
+      },
+    })
+    expect(nodes).toEqual(['attachments'])
+  })
+  test('deps not met', () => {
+    const nodes = getNodesReadyToRun(dag, {
+      api: {
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: {
+          startDate: '2020-01-01',
+          endDate: '2020-12-31',
+        },
+        output: ['123', '456'],
+      },
+      details: {
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: [['123', '456']],
+        output: { '123': 'foo', '456': 'bar' },
+      },
+      attachments: {
+        status: 'errored',
+        started: new Date('2022-01-01T12:00:00Z'),
+        input: [['123', '456']],
+      },
+    })
+    expect(nodes).toEqual([])
+  })
   test('empty deps', () => {
     const nodes = getNodesReadyToRun(dag, {})
-
     expect(nodes).toEqual(['api'])
   })
 })
@@ -370,7 +428,7 @@ describe('runTopology', () => {
       },
     }
     const { promise } = runTopology(spec, dag)
-    await expect(promise).rejects.toThrow('Timeout')
+    await expect(promise).rejects.toThrow('Errored nodes: ["api"]')
   })
   test('completed', async () => {
     const { promise } = runTopology(spec, dag)
@@ -466,7 +524,6 @@ describe('getResumeSnapshot', () => {
           state: 0,
         },
       },
-      error: 'Failed processing id: 1',
     }
     const snapshot = getResumeSnapshot(errorSnapshot)
     expect(snapshot).toMatchObject({
@@ -539,7 +596,7 @@ describe('resumeTopology', () => {
 
   test('resume after initial error', async () => {
     const { promise, getSnapshot } = runTopology(modifiedSpec, dag)
-    await expect(promise).rejects.toThrow('Failed processing id: 2')
+    await expect(promise).rejects.toThrow('Errored nodes: ["attachments"]')
     const snapshot = getSnapshot()
     expect(snapshot).toMatchObject({
       status: 'errored',
@@ -567,6 +624,7 @@ describe('resumeTopology', () => {
         attachments: {
           input: [[1, 2, 3]],
           status: 'errored',
+          error: 'Error: Failed processing id: 2',
           state: {
             index: 0,
             output: {
@@ -575,7 +633,6 @@ describe('resumeTopology', () => {
           },
         },
       },
-      error: 'Failed processing id: 2',
     })
     const { promise: resumeProm } = await resumeTopology(modifiedSpec, snapshot)
     const resumeSnapshot = await resumeProm

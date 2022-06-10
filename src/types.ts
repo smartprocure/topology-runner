@@ -41,19 +41,20 @@ export interface Options {
 }
 
 export type Response = {
-  emitter: EventEmitter<Events,any>,
-  promise: Promise<Snapshot>,
+  emitter: EventEmitter<Events, any>
+  promise: Promise<Snapshot>
   getSnapshot: () => Snapshot
 }
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 export interface NodeData {
-  status: Status
+  status?: Status
   started?: Date
   finished?: Date
   input: any
   output?: any
   state?: any
+  error?: any
 }
 
 export type SnapshotData = Record<string, NodeData>
@@ -64,7 +65,6 @@ export interface Snapshot {
   finished?: Date
   dag: DAG
   data: SnapshotData
-  error?: any
   meta?: any
 }
 
