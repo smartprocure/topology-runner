@@ -36,6 +36,16 @@ The flow of a DAG begins with nodes with no dependencies. More generally,
 when a node's dependencies are met it will be run. Data does does not flow incrementally.
 A node must complete in entirety before a node that depends on it will run.
 
+If a node throws an error it will be caught and no further processing on that
+node will be done. Parallel nodes will continue to run until they either complete
+or throw an error.
+
+An event emitter emits a new "data" snapshot every time a node starts, completes, errors,
+updates its state, or the entire DAG finishes. An "errored" and "completed" event
+will be emitted when the DAG either fails to complete or sucessfully completes. Note
+that the outputted snapshot is mutated internally for efficiency and should not be
+modified.
+
 ```typescript
 import { runTopology, DAG, Spec } from 'topology-runner'
 import { setTimeout } from 'node:timers/promises'
@@ -150,7 +160,6 @@ const persistSnapshot = (snapshot) => {
 
 // Persist to a datastore for resuming. See below.
 emitter.on('data', persistSnapshot)
-emitter.on('done', persistSnapshot)
 
 const snapshot = await promise
 ```

@@ -160,6 +160,8 @@ const nodeEventHandler = (
     snapshot.data[node].status = 'errored'
     snapshot.data[node].finished = new Date()
     snapshot.data[node].error = error.toString()
+    // Emit
+    emitter.emit('data', snapshot)
   }
   return { updateState, running, completed, errored }
 }
@@ -198,6 +200,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         snapshot.status = hasErrors ? 'errored' : 'completed'
         snapshot.finished = new Date()
         // Emit
+        emitter.emit('data', snapshot)
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
         // Cleanup initialized resources
         await cleanupResources(spec, initialized)
