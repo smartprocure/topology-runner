@@ -1,3 +1,7 @@
+# 0.2.0
+
+* Always emit `data`.
+
 # 0.1.0
 
 * Nodes run to completion in parallel with failed nodes.
