@@ -42,7 +42,7 @@ export interface Options {
 
 export type Response = {
   emitter: EventEmitter<Events, any>
-  promise: Promise<Snapshot>
+  promise: Promise<void>
   getSnapshot: () => Snapshot
 }
 export type Status = 'pending' | 'running' | 'completed' | 'errored'

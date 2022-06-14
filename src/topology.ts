@@ -200,14 +200,13 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         snapshot.status = hasErrors ? 'errored' : 'completed'
         snapshot.finished = new Date()
         // Emit
-        emitter.emit('data', snapshot)
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
         // Cleanup initialized resources
         await cleanupResources(spec, initialized)
         if (hasErrors) {
           throw new TopologyError(`Errored nodes: ${JSON.stringify(errored)}`)
         }
-        return snapshot
+        return
       }
 
       // Run nodes
@@ -341,7 +340,7 @@ export const resumeTopology = (spec: Spec, snapshot: Snapshot): Response => {
   if (snapshot.status === 'completed') {
     const emitter = new EventEmitter<Events>()
     const getSnapshot = () => snapshot
-    return { emitter, promise: Promise.resolve(snapshot), getSnapshot }
+    return { emitter, promise: Promise.resolve(), getSnapshot }
   }
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)

@@ -1,3 +1,9 @@
+# 0.3.0
+
+* `runTopology` and `resumeTopology` return `Promise<void>` from
+the `promise` property.
+* Don't emit `data` when finished.
+
 # 0.2.0
 
 * Always emit `data`.
