@@ -688,7 +688,7 @@ describe('resumeTopology', () => {
       },
     })
   })
-  test('resuming completed snapshot should be idempotent', () => {
+  test('resuming completed snapshot should be idempotent', async () => {
     const snapshot: Snapshot = {
       started: new Date('2022-01-01T12:00:00Z'),
       finished: new Date('2022-01-01T12:00:01Z'),
@@ -728,7 +728,8 @@ describe('resumeTopology', () => {
       },
       meta: { launchMissleCode: 1234 },
     }
-    const { getSnapshot } = resumeTopology(spec, snapshot)
+    const { promise, getSnapshot } = resumeTopology(spec, snapshot)
+    await promise
     expect(getSnapshot()).toEqual(snapshot)
   })
 })
