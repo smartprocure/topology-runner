@@ -40,10 +40,10 @@ If a node throws an error it will be caught and no further processing on that
 node will be done. Parallel nodes will continue to run until they either complete
 or throw an error.
 
-An event emitter emits a new "data" snapshot every time a node starts, completes, errors,
-updates its state. The final snapshot is not emitted. This will be returned by the promise.
-An "error" or "done" event will be emitted when the DAG either fails to complete
-or sucessfully completes. Note that the outputted snapshot is mutated internally for
+An event emitter emits a new "data" snapshot every time a node starts, completes, errors, or
+updates its state. Use `getSnapshot` to get the final snapshot, regardless of whether the
+topology fails or succeeds. An "error" or "done" event will be emitted when the DAG either
+fails to complete or sucessfully completes. Note that the outputted snapshot is mutated internally for
 efficiency and should not be modified.
 
 ```typescript
