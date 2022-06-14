@@ -203,6 +203,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
         // Cleanup initialized resources
         await cleanupResources(spec, initialized)
+        // Throw an exception with the errors, causing the promise to reject
         if (hasErrors) {
           throw new TopologyError(`Errored nodes: ${JSON.stringify(errored)}`)
         }
