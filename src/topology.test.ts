@@ -634,10 +634,10 @@ describe('resumeTopology', () => {
         },
       },
     })
-    const { promise: resumeProm, getSnapshot: resumeGetSnapshot } =
+    const { promise: promise2, getSnapshot: getSnapshot2 } =
       await resumeTopology(modifiedSpec, snapshot)
-    await resumeProm
-    expect(resumeGetSnapshot()).toMatchObject({
+    await promise2
+    expect(getSnapshot2()).toMatchObject({
       status: 'completed',
       dag: {
         api: { deps: [] },
