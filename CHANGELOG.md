@@ -1,3 +1,7 @@
+# 0.4.0
+
+* Remove `timeout` since this library probably isn't the best place for it.
+
 # 0.3.0
 
 * `runTopology` and `resumeTopology` return `Promise<void>` from
