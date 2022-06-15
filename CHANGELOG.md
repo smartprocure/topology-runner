@@ -1,3 +1,8 @@
+# 0.4.0
+
+* Changed `meta` to `context`. This is just a blob that is passed
+to `runTopology` and `resumeTopology` without needing to be serialized.
+
 # 0.3.0
 
 * `runTopology` and `resumeTopology` return `Promise<void>` from
