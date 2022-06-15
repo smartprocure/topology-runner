@@ -217,7 +217,7 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
         // Snapshot updater
         const events = nodeEventHandler(node, snapshot, emitter)
         // Get the node
-        const { run, resources = [], timeout } = spec.nodes[node]
+        const { run, resources = [] } = spec.nodes[node]
         // Initialize resources for node if needed
         await initMissingResources(spec, resources, initialized)
         // Use initial data if node has no dependencies, otherwise, data from
@@ -229,21 +229,12 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
         const updateState = events.updateState
         // Resume scenario
         const state = snapshot.data[node]?.state
-        // Abort after timeout
-        const abortController = new AbortController()
-        if (timeout) {
-          setTimeout(
-            () => abortController.abort(`Timeout occurred after ${timeout} ms`),
-            timeout
-          )
-        }
         // Run fn input
         const runInput: RunInput = {
           data,
           resources: reqResources,
           updateState,
           state,
-          signal: abortController.signal,
           context,
         }
         // Update snapshot

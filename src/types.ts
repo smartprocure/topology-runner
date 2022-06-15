@@ -14,17 +14,14 @@ export interface RunInput {
   data: any
   updateState: UpdateState
   state?: any
-  signal: AbortSignal
   context?: any
 }
 
-type Millis = number
 export type RunFn = (arg: RunInput) => Promise<any>
 
 interface NodeDef {
   run: RunFn
   resources?: string[]
-  timeout?: Millis
 }
 export type DAG = Record<string, { deps: string[] }>
 
