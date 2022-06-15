@@ -8,8 +8,10 @@ import {
   RunInput,
   Spec,
   SnapshotData,
-  Response,
   Initialized,
+  RunTopologyInternal,
+  ResumeTopology,
+  RunTopology,
 } from './types'
 import { missingKeys, findKeys } from './util'
 import EventEmitter from 'eventemitter3'
@@ -172,7 +174,7 @@ const nodeEventHandler = (
 export const getMissingSpecNodes = (spec: Spec, dag: DAG) =>
   _.difference(Object.keys(dag), Object.keys(spec.nodes))
 
-const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
+const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
   const missingSpecNodes = getMissingSpecNodes(spec, dag)
   if (missingSpecNodes.length) {
     throw new TopologyError(
@@ -200,14 +202,14 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
         snapshot.status = hasErrors ? 'errored' : 'completed'
         snapshot.finished = new Date()
         // Emit
-        emitter.emit('data', snapshot)
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
         // Cleanup initialized resources
         await cleanupResources(spec, initialized)
+        // Throw an exception, causing the promise to reject
         if (hasErrors) {
           throw new TopologyError(`Errored nodes: ${JSON.stringify(errored)}`)
         }
-        return snapshot
+        return
       }
 
       // Run nodes
@@ -242,7 +244,7 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
           updateState,
           state,
           signal: abortController.signal,
-          meta: snapshot?.meta,
+          context,
         }
         // Update snapshot
         events.running(data)
@@ -265,12 +267,11 @@ const _runTopology = (spec: Spec, snapshot: Snapshot, dag: DAG): Response => {
   return { emitter, promise: run(), getSnapshot }
 }
 
-/*
- * Set input for nodes with no dependencies to options.data,
- * if exists.
+/**
+ * Set input for nodes with no dependencies to data, if exists.
  */
-export const initSnapshotData = (dag: DAG, options: Options = {}) => {
-  if (!_.has('data', options)) {
+export const initSnapshotData = (dag: DAG, data?: any) => {
+  if (_.isEmpty(data)) {
     return {}
   }
   // Get nodes with no dependencies
@@ -280,7 +281,7 @@ export const initSnapshotData = (dag: DAG, options: Options = {}) => {
   )
   // Initialize data
   return noDepsNodes.reduce(
-    (acc, node) => _.set([node, 'input'], options.data, acc),
+    (acc, node) => _.set([node, 'input'], data, acc),
     {}
   )
 }
@@ -288,27 +289,27 @@ export const initSnapshotData = (dag: DAG, options: Options = {}) => {
 /**
  * Run a topology consisting of a DAG and functions for each node in the
  * DAG. A subset of the DAG can be executed by setting either includeNodes
- * or excludeNodes. Initial data is passed via options.data.
+ * or excludeNodes. Initial data is passed via options.data. Optionally
+ * pass a context blob to all nodes.
+
  *
  * Returns an event emitter and a promise. The event emitter emits data
- * every time the topology snapshot updates, done when the topology completes,
- * and error when a node throws an error.
+ * every time the topology snapshot updates.
  */
-export const runTopology = (spec: Spec, inputDag: DAG, options?: Options) => {
+export const runTopology: RunTopology = (spec, inputDag, options) => {
   // Get the filtered dag
   const dag = filterDAG(inputDag, options)
   // Initialize snapshot data
-  const data = initSnapshotData(dag, options)
+  const data = initSnapshotData(dag, options?.data)
   // Initial snapshot
   const snapshot: Snapshot = {
     status: 'running',
     started: new Date(),
     dag,
     data,
-    meta: options?.meta,
   }
   // Run the topology
-  return _runTopology(spec, snapshot, dag)
+  return _runTopology(spec, snapshot, dag, options?.context)
 }
 
 /**
@@ -334,17 +335,21 @@ export const getResumeSnapshot = (snapshot: Snapshot) => {
   return snap
 }
 /**
- * Resume a topology from a previous snapshot.
+ * Resume a topology from a previous snapshot. Optionally pass a context
+ * blob to all nodes.
+ *
+ * Returns an event emitter and a promise. The event emitter emits data
+ * every time the topology snapshot updates.
  */
-export const resumeTopology = (spec: Spec, snapshot: Snapshot): Response => {
+export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
   // Ensures resumption is idempotent
   if (snapshot.status === 'completed') {
     const emitter = new EventEmitter<Events>()
     const getSnapshot = () => snapshot
-    return { emitter, promise: Promise.resolve(snapshot), getSnapshot }
+    return { emitter, promise: Promise.resolve(), getSnapshot }
   }
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)
   // Run the topology
-  return _runTopology(spec, snap, snap.dag)
+  return _runTopology(spec, snap, snap.dag, options?.context)
 }

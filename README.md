@@ -24,7 +24,7 @@ interface RunInput {
   updateState: UpdateState
   state?: any
   signal: AbortSignal
-  meta?: any
+  context?: any
 }
 ```
 
@@ -40,11 +40,11 @@ If a node throws an error it will be caught and no further processing on that
 node will be done. Parallel nodes will continue to run until they either complete
 or throw an error.
 
-An event emitter emits a new "data" snapshot every time a node starts, completes, errors,
-updates its state, or the entire DAG finishes. An "errored" and "completed" event
-will be emitted when the DAG either fails to complete or sucessfully completes. Note
-that the outputted snapshot is mutated internally for efficiency and should not be
-modified.
+An event emitter emits a new "data" snapshot every time a node starts, completes, errors, or
+updates its state. Use `getSnapshot` to get the final snapshot, regardless of whether the
+topology fails or succeeds. An "error" or "done" event will be emitted when the DAG either
+fails to complete or sucessfully completes. Note that the outputted snapshot is mutated internally for
+efficiency and should not be modified.
 
 ```typescript
 import { runTopology, DAG, Spec } from 'topology-runner'
@@ -150,7 +150,7 @@ const spec: Spec = {
   },
 }
 
-const { emitter, promise } = runTopology(spec, dag)
+const { emitter, promise, getSnapshot } = runTopology(spec, dag)
 
 const persistSnapshot = (snapshot) => {
   // Could be Redis, MongoDB, etc.
@@ -161,7 +161,13 @@ const persistSnapshot = (snapshot) => {
 // Persist to a datastore for resuming. See below.
 emitter.on('data', persistSnapshot)
 
-const snapshot = await promise
+try {
+  // Wait for the topology to finish
+  await promise
+} finally {
+  // Persist the final snapshot
+  await persistSnapshot(getSnapshot())
+}
 ```
 
 A successful run of the above will produce a snapshot that looks like this:
@@ -172,21 +178,21 @@ A successful run of the above will produce a snapshot that looks like this:
   "started": "2022-05-20T17:16:48.531Z",
   "dag": {
     "api": { "deps": [] },
-    "details": { "deps": [ "api" ] },
-    "attachments": { "deps": [ "api" ] },
-    "writeToDB": { "deps": [ "details", "attachments" ] }
+    "details": { "deps": ["api"] },
+    "attachments": { "deps": ["api"] },
+    "writeToDB": { "deps": ["details", "attachments"] }
   },
   "data": {
     "api": {
       "started": "2022-05-20T17:16:48.532Z",
       "input": [],
       "status": "completed",
-      "output": [ 1, 2, 3 ],
+      "output": [1, 2, 3],
       "finished": "2022-05-20T17:16:48.533Z"
     },
     "details": {
       "started": "2022-05-20T17:16:48.534Z",
-      "input": [ [ 1, 2, 3 ] ],
+      "input": [[1, 2, 3]],
       "status": "completed",
       "state": {
         "index": 2,
@@ -205,7 +211,7 @@ A successful run of the above will produce a snapshot that looks like this:
     },
     "attachments": {
       "started": "2022-05-20T17:16:48.534Z",
-      "input": [ [ 1, 2, 3 ] ],
+      "input": [[1, 2, 3]],
       "status": "completed",
       "state": {
         "index": 2,

@@ -304,7 +304,7 @@ describe('getInputData', () => {
 
 describe('initData', () => {
   test('data passed', () => {
-    expect(initSnapshotData(dag, { data: [1, 2, 3] })).toEqual({
+    expect(initSnapshotData(dag, [1, 2, 3])).toEqual({
       api: { input: [1, 2, 3] },
     })
   })
@@ -330,18 +330,18 @@ describe('runTopology', () => {
       },
       nodes: {
         api: {
-          run: async ({ data, resources, meta }) => ({ data, resources, meta }),
+          run: async ({ data, resources, context }) => ({ data, resources, context }),
           resources: ['elasticCloud'],
         },
         details: {
-          run: async ({ data, resources, meta }) => ({ data, resources, meta }),
+          run: async ({ data, resources, context }) => ({ data, resources, context }),
           resources: ['mongoDb'],
         },
       },
     }
     const data = [1, 2, 3]
-    const meta = { launchMissleCode: 1234 }
-    const { promise, getSnapshot } = runTopology(spec, dag, { data, meta })
+    const context = { launchMissleCode: 1234 }
+    const { promise, getSnapshot } = runTopology(spec, dag, { data, context })
     await promise
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
@@ -353,7 +353,7 @@ describe('runTopology', () => {
           output: {
             data: [1, 2, 3],
             resources: { elasticCloud: 'elastic' },
-            meta: { launchMissleCode: 1234 },
+            context: { launchMissleCode: 1234 },
           },
         },
         details: {
@@ -361,7 +361,7 @@ describe('runTopology', () => {
             {
               data: [1, 2, 3],
               resources: { elasticCloud: 'elastic' },
-              meta: { launchMissleCode: 1234 },
+              context: { launchMissleCode: 1234 },
             },
           ],
           status: 'completed',
@@ -370,15 +370,14 @@ describe('runTopology', () => {
               {
                 data: [1, 2, 3],
                 resources: { elasticCloud: 'elastic' },
-                meta: { launchMissleCode: 1234 },
+                context: { launchMissleCode: 1234 },
               },
             ],
             resources: { mongoDb: 'mongo' },
-            meta: { launchMissleCode: 1234 },
+            context: { launchMissleCode: 1234 },
           },
         },
       },
-      meta: { launchMissleCode: 1234 },
     })
   })
   test('bad arguments', () => {
@@ -431,9 +430,9 @@ describe('runTopology', () => {
     await expect(promise).rejects.toThrow('Errored nodes: ["api"]')
   })
   test('completed', async () => {
-    const { promise } = runTopology(spec, dag)
-    const snapshot = await promise
-    expect(snapshot).toMatchObject({
+    const { promise, getSnapshot } = runTopology(spec, dag)
+    await promise
+    expect(getSnapshot()).toMatchObject({
       status: 'completed',
       dag: {
         api: { deps: [] },
@@ -634,9 +633,10 @@ describe('resumeTopology', () => {
         },
       },
     })
-    const { promise: resumeProm } = await resumeTopology(modifiedSpec, snapshot)
-    const resumeSnapshot = await resumeProm
-    expect(resumeSnapshot).toMatchObject({
+    const { promise: promise2, getSnapshot: getSnapshot2 } =
+      await resumeTopology(modifiedSpec, snapshot)
+    await promise2
+    expect(getSnapshot2()).toMatchObject({
       status: 'completed',
       dag: {
         api: { deps: [] },
@@ -686,5 +686,44 @@ describe('resumeTopology', () => {
         },
       },
     })
+  })
+  test('resuming completed snapshot should be idempotent', async () => {
+    const snapshot: Snapshot = {
+      started: new Date('2022-01-01T12:00:00Z'),
+      finished: new Date('2022-01-01T12:00:01Z'),
+      status: 'completed',
+      dag: { api: { deps: [] }, details: { deps: ['api'] } },
+      data: {
+        api: {
+          input: [1, 2, 3],
+          status: 'completed',
+          output: {
+            data: [1, 2, 3],
+            resources: { elasticCloud: 'elastic' },
+          },
+        },
+        details: {
+          input: [
+            {
+              data: [1, 2, 3],
+              resources: { elasticCloud: 'elastic' },
+            },
+          ],
+          status: 'completed',
+          output: {
+            data: [
+              {
+                data: [1, 2, 3],
+                resources: { elasticCloud: 'elastic' },
+              },
+            ],
+            resources: { mongoDb: 'mongo' },
+          },
+        },
+      },
+    }
+    const { promise, getSnapshot } = resumeTopology(spec, snapshot)
+    await promise
+    expect(getSnapshot()).toEqual(snapshot)
   })
 })
