@@ -329,11 +329,19 @@ describe('runTopology', () => {
       },
       nodes: {
         api: {
-          run: async ({ data, resources, context }) => ({ data, resources, context }),
+          run: async ({ data, resources, context }) => ({
+            data,
+            resources,
+            context,
+          }),
           resources: ['elasticCloud'],
         },
         details: {
-          run: async ({ data, resources, context }) => ({ data, resources, context }),
+          run: async ({ data, resources, context }) => ({
+            data,
+            resources,
+            context,
+          }),
           resources: ['mongoDb'],
         },
       },
@@ -495,26 +503,25 @@ describe('getResumeSnapshot', () => {
           started: new Date('2020-01-01T00:00:00Z'),
           input: [[1, 2, 3]],
           status: 'errored',
+          error: 'fail',
           state: 0,
         },
       },
     }
     const snapshot = getResumeSnapshot(errorSnapshot)
+    // Started is set to current time
+    expect(snapshot.started.getTime()).toBeGreaterThan(
+      errorSnapshot.started.getTime()
+    )
+    // Finished should be removed
+    expect(snapshot.finished).toBeUndefined()
     expect(snapshot).toMatchObject({
       status: 'running',
       dag: {
-        api: {
-          deps: [],
-        },
-        details: {
-          deps: ['api'],
-        },
-        attachments: {
-          deps: ['api'],
-        },
-        writeToDB: {
-          deps: ['details', 'attachments'],
-        },
+        api: { deps: [] },
+        details: { deps: ['api'] },
+        attachments: { deps: ['api'] },
+        writeToDB: { deps: ['details', 'attachments'] },
       },
       data: {
         api: {

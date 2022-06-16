@@ -54,12 +54,15 @@ export const filterDAG = (dag: DAG, options: Options = {}): DAG => {
  * node's status is pending.
  */
 export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
+  // Get completed nodes
   const completed = findKeys({ status: 'completed' }, data)
   const nodes: string[] = []
   for (const node in dag) {
     const { deps } = dag[node]
     // The status is not set for the node on the snapshot or status is pending
     const isPending = !data[node]?.status || data[node]?.status === 'pending'
+    // Dependencies for the node are all completed and the node is currently
+    // pending.
     if (_.difference(deps, completed).length === 0 && isPending) {
       nodes.push(node)
     }
@@ -185,8 +188,9 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
   const initialized: Initialized = {}
   // Track node promises
   const promises: ObjectOfPromises = {}
+  // Event emitter
   const emitter = new EventEmitter<Events>()
-  // Emit
+  // Emit initial snapshot
   emitter.emit('data', snapshot)
 
   const run = async () => {
@@ -196,6 +200,7 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
 
       // There is no more work to be done
       if (_.isEmpty(readyToRunNodes) && _.isEmpty(promises)) {
+        // Get errored nodes
         const errored = findKeys({ status: 'errored' }, snapshot.data)
         const hasErrors = !_.isEmpty(errored)
         // Update snapshot
@@ -205,18 +210,19 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
         // Cleanup initialized resources
         await cleanupResources(spec, initialized)
-        // Throw an exception, causing the promise to reject
+        // Throw an exception, causing the promise to reject, if one or more
+        // nodes have errored
         if (hasErrors) {
           throw new TopologyError(`Errored nodes: ${JSON.stringify(errored)}`)
         }
         return
       }
 
-      // Run nodes
+      // Run nodes that have not been run yet
       for (const node of readyToRunNodes) {
         // Snapshot updater
         const events = nodeEventHandler(node, snapshot, emitter)
-        // Get the node
+        // Get the node from the spec
         const { run, resources = [] } = spec.nodes[node]
         // Initialize resources for node if needed
         await initMissingResources(spec, resources, initialized)
@@ -227,7 +233,7 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
         const reqResources = _.pick(resources, initialized)
         // Callback to update state
         const updateState = events.updateState
-        // Resume scenario
+        // Get node state. Will only be present if resuming.
         const state = snapshot.data[node]?.state
         // Run fn input
         const runInput: RunInput = {
@@ -285,7 +291,8 @@ export const initSnapshotData = (dag: DAG, data?: any) => {
 
  *
  * Returns an event emitter and a promise. The event emitter emits data
- * every time the topology snapshot updates.
+ * every time the topology snapshot updates. Events include: data, error, and
+ * done.
  */
 export const runTopology: RunTopology = (spec, inputDag, options) => {
   // Get the filtered dag
@@ -304,7 +311,7 @@ export const runTopology: RunTopology = (spec, inputDag, options) => {
 }
 
 /**
- * Set uncompleted nodes to pending and reset appropriate
+ * Set uncompleted nodes to 'pending' and reset appropriate
  * NodeDef fields.
  */
 const resetUncompletedNodes = (data: SnapshotData): SnapshotData =>
@@ -315,6 +322,10 @@ const resetUncompletedNodes = (data: SnapshotData): SnapshotData =>
       : { ..._.pick(['input', 'state'], obj), status: 'pending' }
   }, data)
 
+/**
+ * Transform a previously run snapshot into one that is ready to
+ * be run again.
+ */
 export const getResumeSnapshot = (snapshot: Snapshot) => {
   const snap: Snapshot = {
     ...snapshot,
@@ -330,7 +341,8 @@ export const getResumeSnapshot = (snapshot: Snapshot) => {
  * blob to all nodes.
  *
  * Returns an event emitter and a promise. The event emitter emits data
- * every time the topology snapshot updates.
+ * every time the topology snapshot updates. Events include: data, error, and
+ * done.
  */
 export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
   // Ensures resumption is idempotent
