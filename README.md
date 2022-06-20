@@ -23,8 +23,9 @@ interface RunInput {
   data: any
   updateState: UpdateState
   state?: any
-  signal: AbortSignal
   context?: any
+  node: string
+  signal: AbortSignal
 }
 ```
 
@@ -45,6 +46,9 @@ updates its state. Use `getSnapshot` to get the final snapshot, regardless of wh
 topology fails or succeeds. An "error" or "done" event will be emitted when the DAG either
 fails to complete or sucessfully completes. Note that the outputted snapshot is mutated internally for
 efficiency and should not be modified.
+
+To gracefully shut down a topology call the `stop` function and handle the abort signal
+in your run functions.
 
 ```typescript
 import { runTopology, DAG, Spec } from 'topology-runner'

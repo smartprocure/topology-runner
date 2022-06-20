@@ -15,6 +15,8 @@ export interface RunInput {
   updateState: UpdateState
   state?: any
   context?: any
+  node: string
+  signal: AbortSignal
 }
 
 export type RunFn = (arg: RunInput) => Promise<any>
@@ -40,7 +42,8 @@ export interface Options {
 export type Response = {
   emitter: EventEmitter<Events, any>
   promise: Promise<void>
-  getSnapshot: () => Snapshot
+  getSnapshot(): Snapshot
+  stop(): void
 }
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
