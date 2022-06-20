@@ -48,7 +48,7 @@ fails to complete or sucessfully completes. Note that the outputted snapshot is 
 efficiency and should not be modified.
 
 To gracefully shut down a topology call the `stop` function and handle the abort signal
-in your run functions.
+in your run functions by throwing an exception.
 
 ```typescript
 import { runTopology, DAG, Spec } from 'topology-runner'
