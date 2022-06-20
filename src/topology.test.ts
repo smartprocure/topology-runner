@@ -502,6 +502,7 @@ describe('runTopology', () => {
     const { promise, getSnapshot, stop } = runTopology(spec, dag)
     setTimeout(stop, 200)
     await expect(promise).rejects.toThrow('Errored nodes: ["api"]')
+    // Node errored
     expect(getSnapshot()).toMatchObject({
       status: 'errored',
       dag: { api: { deps: [] } },
@@ -514,6 +515,7 @@ describe('runTopology', () => {
         },
       },
     })
+    // Resources cleaned up
     expect(cleanedUp).toEqual(['elastic'])
   })
 })
