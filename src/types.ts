@@ -87,6 +87,6 @@ export type RunTopologyInternal = (
 
 export type ResumeTopology = (
   spec: Spec,
-  snapshot: Snapshot,
+  snapshot?: Snapshot,
   options?: Pick<Options, 'context'>
 ) => Response

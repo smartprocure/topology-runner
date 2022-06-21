@@ -351,6 +351,9 @@ export const getResumeSnapshot = (snapshot: Snapshot) => {
  * done.
  */
 export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
+  if (!snapshot) {
+    throw new TopologyError('Snapshot is undefined')
+  }
   // Ensures resumption is idempotent
   if (snapshot.status === 'completed') {
     const emitter = new EventEmitter<Events>()

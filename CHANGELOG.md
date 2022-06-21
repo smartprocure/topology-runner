@@ -1,3 +1,7 @@
+# 0.6.0
+
+* Handle empty snapshot when resuming.
+
 # 0.5.0
 
 * Add `stop` fn to abort the topology.
