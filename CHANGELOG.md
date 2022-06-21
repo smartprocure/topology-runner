@@ -1,3 +1,7 @@
+# 0.5.0
+
+* Add `stop` fn to abort the topology.
+
 # 0.4.0
 
 * Remove `timeout` since this library probably isn't the best place for it.

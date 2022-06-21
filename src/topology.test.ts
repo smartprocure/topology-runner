@@ -13,6 +13,7 @@ import {
   cleanupResources,
 } from './topology'
 import { DAG, RunFn, Snapshot, Spec } from './types'
+import timers from 'timers/promises'
 
 const dag: DAG = {
   api: { deps: [] },
@@ -465,6 +466,57 @@ describe('runTopology', () => {
         },
       },
     })
+  })
+  test('gracefully shutdown when stop is called', async () => {
+    const cleanedUp: any[] = []
+    const cleanup = (x: any) => {
+      cleanedUp.push(x)
+    }
+
+    const dag: DAG = {
+      api: { deps: [] },
+    }
+    const spec: Spec = {
+      resources: {
+        elasticCloud: {
+          init: async () => 'elastic',
+          cleanup: async (x: any) => cleanup(x),
+        },
+      },
+      nodes: {
+        api: {
+          run: async ({ signal, updateState }) => {
+            for (let i = 0; i < 5; i++) {
+              if (signal.aborted) {
+                throw new Error('Aborted')
+              }
+              await timers.setTimeout(100)
+              updateState({ index: i })
+            }
+          },
+          resources: ['elasticCloud'],
+        },
+      },
+    }
+
+    const { promise, getSnapshot, stop } = runTopology(spec, dag)
+    setTimeout(stop, 200)
+    await expect(promise).rejects.toThrow('Errored nodes: ["api"]')
+    // Node errored
+    expect(getSnapshot()).toMatchObject({
+      status: 'errored',
+      dag: { api: { deps: [] } },
+      data: {
+        api: {
+          input: [],
+          status: 'errored',
+          state: { index: 1 },
+          error: 'Error: Aborted',
+        },
+      },
+    })
+    // Resources cleaned up
+    expect(cleanedUp).toEqual(['elastic'])
   })
 })
 

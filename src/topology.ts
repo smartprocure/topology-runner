@@ -184,6 +184,7 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
       `Missing the following nodes in spec: ${missingSpecNodes.join(', ')}`
     )
   }
+  const abortController = new AbortController()
   // Initialized resources
   const initialized: Initialized = {}
   // Track node promises
@@ -196,7 +197,7 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
   const run = async () => {
     while (true) {
       // Get nodes with resolved dependencies that have not been run
-      const readyToRunNodes = getNodesReadyToRun(dag, snapshot.data)
+      const readyToRunNodes = abortController.signal.aborted ? [] : getNodesReadyToRun(dag, snapshot.data)
 
       // There is no more work to be done
       if (_.isEmpty(readyToRunNodes) && _.isEmpty(promises)) {
@@ -242,6 +243,8 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
           updateState,
           state,
           context,
+          node,
+          signal: abortController.signal,
         }
         // Update snapshot
         events.running(data)
@@ -260,8 +263,11 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
   }
 
   const getSnapshot = () => snapshot
+  const stop = () => {
+    abortController.abort()
+  }
 
-  return { emitter, promise: run(), getSnapshot }
+  return { emitter, promise: run(), getSnapshot, stop }
 }
 
 /**
@@ -349,7 +355,9 @@ export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
   if (snapshot.status === 'completed') {
     const emitter = new EventEmitter<Events>()
     const getSnapshot = () => snapshot
-    return { emitter, promise: Promise.resolve(), getSnapshot }
+    /* eslint-disable-next-line */
+    const stop = () => {}
+    return { emitter, promise: Promise.resolve(), getSnapshot, stop }
   }
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)
