@@ -760,4 +760,10 @@ describe('resumeTopology', () => {
     await promise
     expect(getSnapshot()).toEqual(snapshot)
   })
+  test('should throw if snapshot is undefined', async () => {
+    const snapshot = undefined
+    expect(() => {
+      resumeTopology(spec, snapshot)
+    }).toThrow(new TopologyError('Snapshot is undefined'))
+  })
 })
