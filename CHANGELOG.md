@@ -4,6 +4,7 @@
 * Snapshot data includes `deps`. Removed `dag`.
 * Get error stacktrace if available.
 * Wrap initial input data in an array to match other nodes.
+* Removed `resources`.
 
 # 0.6.0
 
