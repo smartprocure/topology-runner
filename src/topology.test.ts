@@ -74,6 +74,7 @@ describe('getNodesReadyToRun', () => {
   test('resume - pending', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        deps: [],
         status: 'pending',
         started: new Date('2022-01-01T12:00:00Z'),
         input: {
@@ -87,6 +88,7 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -102,6 +104,7 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed and running', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -112,6 +115,7 @@ describe('getNodesReadyToRun', () => {
         output: ['123', '456'],
       },
       details: {
+        deps: ['api'],
         status: 'running',
         started: new Date('2022-01-01T12:00:00Z'),
         input: [['123', '456']],
@@ -122,6 +126,7 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed and errored', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -132,6 +137,7 @@ describe('getNodesReadyToRun', () => {
         output: ['123', '456'],
       },
       details: {
+        deps: ['api'],
         status: 'errored',
         started: new Date('2022-01-01T12:00:00Z'),
         input: [['123', '456']],
@@ -142,6 +148,7 @@ describe('getNodesReadyToRun', () => {
   test('deps not met', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -152,12 +159,14 @@ describe('getNodesReadyToRun', () => {
         output: ['123', '456'],
       },
       details: {
+        deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         input: [['123', '456']],
         output: { '123': 'foo', '456': 'bar' },
       },
       attachments: {
+        deps: ['api'],
         status: 'errored',
         started: new Date('2022-01-01T12:00:00Z'),
         input: [['123', '456']],
@@ -175,6 +184,7 @@ describe('getInputData', () => {
   test('single dep', () => {
     const input = getInputData(dag, 'details', {
       api: {
+        deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -190,6 +200,7 @@ describe('getInputData', () => {
   test('multiple deps', () => {
     const input = getInputData(dag, 'writeToDB', {
       api: {
+        deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -200,6 +211,7 @@ describe('getInputData', () => {
         output: ['123', '456'],
       },
       details: {
+        deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -207,6 +219,7 @@ describe('getInputData', () => {
         output: { 123: { description: 'foo' } },
       },
       attachments: {
+        deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
@@ -222,6 +235,7 @@ describe('getInputData', () => {
   test('resume scenario', () => {
     const input = getInputData(dag, 'api', {
       api: {
+        deps: [],
         status: 'pending',
         input: {
           startDate: '2020-01-01',
@@ -240,11 +254,19 @@ describe('getInputData', () => {
 describe('initData', () => {
   test('data passed', () => {
     expect(initSnapshotData(dag, [1, 2, 3])).toEqual({
-      api: { input: [[1, 2, 3]] },
+      api: { deps: [], status: 'pending', input: [[1, 2, 3]] },
+      details: { deps: ['api'], status: 'pending' },
+      attachments: { deps: ['api'], status: 'pending' },
+      writeToDB: { deps: ['details', 'attachments'], status: 'pending' },
     })
   })
   test('data empty', () => {
-    expect(initSnapshotData(dag)).toEqual({})
+    expect(initSnapshotData(dag)).toEqual({
+      api: { deps: [], status: 'pending' },
+      details: { deps: ['api'], status: 'pending' },
+      attachments: { deps: ['api'], status: 'pending' },
+      writeToDB: { deps: ['details', 'attachments'], status: 'pending' },
+    })
   })
 })
 
@@ -272,7 +294,6 @@ describe('runTopology', () => {
     await promise
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
-      dag: { api: { deps: [] }, details: { deps: ['api'] } },
       data: {
         api: {
           input: [[1, 2, 3]],
@@ -308,50 +329,40 @@ describe('runTopology', () => {
     await promise
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
-      dag: {
-        api: { deps: [] },
-        details: { deps: ['api'] },
-        attachments: { deps: ['api'] },
-        writeToDB: { deps: ['details', 'attachments'] },
-      },
       data: {
         api: {
-          input: [],
+          deps: [],
           status: 'completed',
+          input: [],
           output: [1, 2, 3],
         },
         details: {
-          input: [[1, 2, 3]],
+          deps: ['api'],
           status: 'completed',
+          input: [[1, 2, 3]],
           output: {
-            1: 'description 1',
-            2: 'description 2',
-            3: 'description 3',
+            '1': 'description 1',
+            '2': 'description 2',
+            '3': 'description 3',
           },
         },
         attachments: {
-          input: [[1, 2, 3]],
+          deps: ['api'],
           status: 'completed',
-          output: {
-            1: 'file1.jpg',
-            2: 'file2.jpg',
-            3: 'file3.jpg',
-          },
+          input: [[1, 2, 3]],
+          output: { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' },
         },
         writeToDB: {
+          deps: ['details', 'attachments'],
+          status: 'completed',
           input: [
             {
-              1: 'description 1',
-              2: 'description 2',
-              3: 'description 3',
+              '1': 'description 1',
+              '2': 'description 2',
+              '3': 'description 3',
             },
-            {
-              1: 'file1.jpg',
-              2: 'file2.jpg',
-              3: 'file3.jpg',
-            },
+            { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' },
           ],
-          status: 'completed',
           output: null,
         },
       },
@@ -379,7 +390,6 @@ describe('runTopology', () => {
     // Node errored
     expect(getSnapshot()).toMatchObject({
       status: 'errored',
-      dag: { api: { deps: [] } },
       data: {
         api: {
           input: [],
@@ -398,14 +408,9 @@ describe('getResumeSnapshot', () => {
       status: 'errored',
       started: new Date('2020-01-01T00:00:00Z'),
       finished: new Date('2020-01-01T00:00:01Z'),
-      dag: {
-        api: { deps: [] },
-        details: { deps: ['api'] },
-        attachments: { deps: ['api'] },
-        writeToDB: { deps: ['details', 'attachments'] },
-      },
       data: {
         api: {
+          deps: [],
           started: new Date('2020-01-01T00:00:00Z'),
           finished: new Date('2020-01-01T00:00:01Z'),
           input: [],
@@ -413,6 +418,7 @@ describe('getResumeSnapshot', () => {
           output: [1, 2, 3],
         },
         details: {
+          deps: ['api'],
           started: new Date('2020-01-01T00:00:00Z'),
           finished: new Date('2020-01-01T00:00:01Z'),
           input: [[1, 2, 3]],
@@ -424,6 +430,7 @@ describe('getResumeSnapshot', () => {
           },
         },
         attachments: {
+          deps: ['api'],
           started: new Date('2020-01-01T00:00:00Z'),
           input: [[1, 2, 3]],
           status: 'errored',
@@ -441,12 +448,6 @@ describe('getResumeSnapshot', () => {
     expect(snapshot.finished).toBeUndefined()
     expect(snapshot).toMatchObject({
       status: 'running',
-      dag: {
-        api: { deps: [] },
-        details: { deps: ['api'] },
-        attachments: { deps: ['api'] },
-        writeToDB: { deps: ['details', 'attachments'] },
-      },
       data: {
         api: {
           started: new Date('2020-01-01T00:00:00.000Z'),
@@ -505,19 +506,15 @@ describe('resumeTopology', () => {
     const snapshot = getSnapshot()
     expect(snapshot).toMatchObject({
       status: 'errored',
-      dag: {
-        api: { deps: [] },
-        details: { deps: ['api'] },
-        attachments: { deps: ['api'] },
-        writeToDB: { deps: ['details', 'attachments'] },
-      },
       data: {
         api: {
+          deps: [],
           input: [],
           status: 'completed',
           output: [1, 2, 3],
         },
         details: {
+          deps: ['api'],
           input: [[1, 2, 3]],
           status: 'completed',
           output: {
@@ -527,6 +524,7 @@ describe('resumeTopology', () => {
           },
         },
         attachments: {
+          deps: ['api'],
           input: [[1, 2, 3]],
           status: 'errored',
           error: expect.stringContaining('Error: Failed processing id: 2'),
@@ -544,19 +542,15 @@ describe('resumeTopology', () => {
     await promise2
     expect(getSnapshot2()).toMatchObject({
       status: 'completed',
-      dag: {
-        api: { deps: [] },
-        details: { deps: ['api'] },
-        attachments: { deps: ['api'] },
-        writeToDB: { deps: ['details', 'attachments'] },
-      },
       data: {
         api: {
+          deps: [],
           input: [],
           status: 'completed',
           output: [1, 2, 3],
         },
         details: {
+          deps: ['api'],
           input: [[1, 2, 3]],
           status: 'completed',
           output: {
@@ -566,6 +560,7 @@ describe('resumeTopology', () => {
           },
         },
         attachments: {
+          deps: ['api'],
           input: [[1, 2, 3]],
           status: 'completed',
           output: {
@@ -575,6 +570,7 @@ describe('resumeTopology', () => {
           },
         },
         writeToDB: {
+          deps: ['details', 'attachments'],
           input: [
             {
               1: 'description 1',
@@ -598,9 +594,9 @@ describe('resumeTopology', () => {
       started: new Date('2022-01-01T12:00:00Z'),
       finished: new Date('2022-01-01T12:00:01Z'),
       status: 'completed',
-      dag: { api: { deps: [] }, details: { deps: ['api'] } },
       data: {
         api: {
+          deps: [],
           input: [1, 2, 3],
           status: 'completed',
           output: {
@@ -608,6 +604,7 @@ describe('resumeTopology', () => {
           },
         },
         details: {
+          deps: ['api'],
           input: [
             {
               data: [1, 2, 3],

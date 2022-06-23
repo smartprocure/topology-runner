@@ -12,6 +12,7 @@ import {
   RunTopology,
   NodeDef,
   Spec,
+  NodeData,
 } from './types'
 import { findKeys } from './util'
 import EventEmitter from 'eventemitter3'
@@ -100,11 +101,9 @@ const nodeEventHandler = (
   }
   const running = (data: any) => {
     // Update snapshot
-    snapshot.data[node] = {
-      started: new Date(),
-      input: data,
-      status: 'running',
-    }
+    snapshot.data[node].started = new Date()
+    snapshot.data[node].input = data
+    snapshot.data[node].status = 'running'
     // Emit
     emitter.emit('data', snapshot)
   }
@@ -224,19 +223,21 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
  * Set input for nodes with no dependencies to data, if exists.
  */
 export const initSnapshotData = (dag: DAG, data?: any): SnapshotData => {
-  if (_.isEmpty(data)) {
-    return {}
-  }
   // Get nodes with no dependencies
   const noDepsNodes = findKeys(
     ({ deps }: { deps: string[] }) => _.isEmpty(deps),
     dag
   )
-  // Initialize data
-  return noDepsNodes.reduce(
-    (acc, node) => _.set([node, 'input'], [data], acc),
-    {}
-  )
+
+  const snapshotData: SnapshotData = {}
+
+  for (const node in dag) {
+    snapshotData[node] = { ...dag[node], status: 'pending' }
+    if (data !== undefined && noDepsNodes.includes(node)) {
+      snapshotData[node].input = [data]
+    }
+  }
+  return snapshotData
 }
 
 /**
@@ -263,7 +264,6 @@ export const runTopology: RunTopology = (spec, options) => {
   const snapshot: Snapshot = {
     status: 'running',
     started: new Date(),
-    dag: dag,
     data,
   }
   // Run the topology
@@ -279,7 +279,7 @@ const resetUncompletedNodes = (data: SnapshotData): SnapshotData =>
     const { status, ...obj } = nodeData
     return status === 'completed'
       ? nodeData
-      : { ..._.pick(['input', 'state'], obj), status: 'pending' }
+      : { ..._.pick(['input', 'state', 'deps'], obj), status: 'pending' }
   }, data)
 
 /**
@@ -318,6 +318,10 @@ export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
   }
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)
+  const dag: DAG = _.mapValues<NodeData, { deps: string[] }>(
+    _.pick('deps'),
+    snap.data
+  )
   // Run the topology
-  return _runTopology(spec, snap.dag, snap, options?.context)
+  return _runTopology(spec, dag, snap, options?.context)
 }

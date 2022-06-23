@@ -38,10 +38,11 @@ export type Response = {
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 export interface NodeData {
-  status?: Status
+  deps: string[],
+  status: Status
   started?: Date
   finished?: Date
-  input: any
+  input?: any
   output?: any
   state?: any
   error?: any
@@ -53,7 +54,6 @@ export interface Snapshot {
   status: Status
   started: Date
   finished?: Date
-  dag: DAG
   data: SnapshotData
 }
 
