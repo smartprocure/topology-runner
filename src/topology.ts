@@ -223,7 +223,7 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
 /**
  * Set input for nodes with no dependencies to data, if exists.
  */
-export const initSnapshotData = (dag: DAG, data?: any) => {
+export const initSnapshotData = (dag: DAG, data?: any): SnapshotData => {
   if (_.isEmpty(data)) {
     return {}
   }
@@ -252,7 +252,7 @@ export const initSnapshotData = (dag: DAG, data?: any) => {
  */
 export const runTopology: RunTopology = (spec, options) => {
   const _dag: DAG = _.mapValues<NodeDef, { deps: string[] }>(
-    _.omit('run'),
+    _.pick('deps'),
     spec
   )
   // Get the filtered dag

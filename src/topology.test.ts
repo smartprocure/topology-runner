@@ -244,7 +244,7 @@ describe('initData', () => {
     })
   })
   test('data empty', () => {
-    expect(initSnapshotData(dag, {})).toEqual({})
+    expect(initSnapshotData(dag)).toEqual({})
   })
 })
 
