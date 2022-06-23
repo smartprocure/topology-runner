@@ -1,16 +1,9 @@
 import EventEmitter from 'eventemitter3'
 
-interface Resource<A> {
-  init(): Promise<A> | A
-  cleanup?(resource: A): Promise<void> | void
-}
-
-type ResourceInitializers = Record<string, Resource<any>>
 type UpdateState = (state: any) => void
 export type Initialized = Record<string, any>
 
 export interface RunInput {
-  resources: Record<string, any>
   data: any
   updateState: UpdateState
   state?: any
@@ -21,16 +14,13 @@ export interface RunInput {
 
 export type RunFn = (arg: RunInput) => Promise<any>
 
-interface NodeDef {
+export interface NodeDef {
   run: RunFn
-  resources?: string[]
+  deps: string[]
 }
-export type DAG = Record<string, { deps: string[] }>
 
-export interface Spec {
-  resources?: ResourceInitializers
-  nodes: Record<string, NodeDef>
-}
+export type DAG = Record<string, { deps: string[] }>
+export type Spec = Record<string, NodeDef>
 
 export interface Options {
   includeNodes?: string[]
@@ -65,7 +55,6 @@ export interface Snapshot {
   finished?: Date
   dag: DAG
   data: SnapshotData
-  context?: any
 }
 
 export type ObjectOfPromises = Record<string | number, Promise<any>>
@@ -74,14 +63,13 @@ export type Events = 'data' | 'error' | 'done'
 
 export type RunTopology = (
   spec: Spec,
-  inputDag: DAG,
   options?: Options
 ) => Response
 
 export type RunTopologyInternal = (
   spec: Spec,
-  snapshot: Snapshot,
   dag: DAG,
+  snapshot: Snapshot,
   context: any
 ) => Response
 

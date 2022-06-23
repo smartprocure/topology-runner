@@ -3,7 +3,7 @@ import _ from 'lodash/fp'
 /**
  * Find keys where values match pred. pred can be a lodash iteratee.
  */
-export const findKeys = (pred: string | object, obj: Record<string, any>) => {
+export function findKeys<A = any>(pred: string | object, obj: Record<string, A>) {
   const iteratee = _.iteratee(pred)
   const keys = []
   for (const key in obj) {
@@ -14,9 +14,3 @@ export const findKeys = (pred: string | object, obj: Record<string, any>) => {
   }
   return keys
 }
-
-/**
- * Returns the keys from those passed that are missing in obj.
- */
-export const missingKeys = (keys: string[], obj: object) =>
-  _.flow(Object.keys, _.difference(keys))(obj)

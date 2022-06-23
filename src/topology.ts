@@ -6,14 +6,14 @@ import {
   Snapshot,
   Options,
   RunInput,
-  Spec,
   SnapshotData,
-  Initialized,
   RunTopologyInternal,
   ResumeTopology,
   RunTopology,
+  NodeDef,
+  Spec,
 } from './types'
-import { missingKeys, findKeys } from './util'
+import { findKeys } from './util'
 import EventEmitter from 'eventemitter3'
 import makeError from 'make-error'
 
@@ -71,49 +71,6 @@ export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
 }
 
 /**
- * Call init on resources.
- */
-export const initResources = async (spec: Spec, resources: string[]) => {
-  const values = await Promise.all(
-    resources.map((resource) => spec?.resources?.[resource]?.init())
-  )
-  return _.zipObj(resources, values)
-}
-
-/**
- * Call cleanup on resources.
- */
-export const cleanupResources = (spec: Spec, initialized: Initialized) => {
-  const ps = []
-  for (const [key, val] of Object.entries(initialized)) {
-    const cleanupFn = spec?.resources?.[key]?.cleanup
-    if (cleanupFn) {
-      ps.push(cleanupFn(val))
-    }
-  }
-  return Promise.all(ps)
-}
-
-/**
- * Calculate resources that are needed but not initialized.
- * Mutates initialized, adding the missing resources.
- */
-const initMissingResources = async (
-  spec: Spec,
-  resources: string[],
-  initialized: Initialized
-) => {
-  const missing = missingKeys(resources, initialized)
-  if (missing) {
-    const newInit = await initResources(spec, missing)
-    for (const key in newInit) {
-      const val = newInit[key]
-      initialized[key] = val
-    }
-  }
-}
-
-/**
  * Generate an array from the outputs of the node's dependencies.
  */
 export const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
@@ -164,7 +121,7 @@ const nodeEventHandler = (
     // Update snapshot
     snapshot.data[node].status = 'errored'
     snapshot.data[node].finished = new Date()
-    snapshot.data[node].error = error.toString()
+    snapshot.data[node].error = error.stack || error
     // Emit
     emitter.emit('data', snapshot)
   }
@@ -175,9 +132,9 @@ const nodeEventHandler = (
  * Check if all nodes in the DAG are in the spec
  */
 export const getMissingSpecNodes = (spec: Spec, dag: DAG) =>
-  _.difference(Object.keys(dag), Object.keys(spec.nodes))
+  _.difference(Object.keys(dag), Object.keys(spec))
 
-const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
+const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   const missingSpecNodes = getMissingSpecNodes(spec, dag)
   if (missingSpecNodes.length) {
     throw new TopologyError(
@@ -185,8 +142,6 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
     )
   }
   const abortController = new AbortController()
-  // Initialized resources
-  const initialized: Initialized = {}
   // Track node promises
   const promises: ObjectOfPromises = {}
   // Event emitter
@@ -197,7 +152,9 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
   const run = async () => {
     while (true) {
       // Get nodes with resolved dependencies that have not been run
-      const readyToRunNodes = abortController.signal.aborted ? [] : getNodesReadyToRun(dag, snapshot.data)
+      const readyToRunNodes = abortController.signal.aborted
+        ? []
+        : getNodesReadyToRun(dag, snapshot.data)
 
       // There is no more work to be done
       if (_.isEmpty(readyToRunNodes) && _.isEmpty(promises)) {
@@ -209,8 +166,6 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
         snapshot.finished = new Date()
         // Emit
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
-        // Cleanup initialized resources
-        await cleanupResources(spec, initialized)
         // Throw an exception, causing the promise to reject, if one or more
         // nodes have errored
         if (hasErrors) {
@@ -224,14 +179,10 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
         // Snapshot updater
         const events = nodeEventHandler(node, snapshot, emitter)
         // Get the node from the spec
-        const { run, resources = [] } = spec.nodes[node]
-        // Initialize resources for node if needed
-        await initMissingResources(spec, resources, initialized)
+        const { run } = spec[node]
         // Use initial data if node has no dependencies, otherwise, data from
         // completed nodes
         const data = getInputData(dag, node, snapshot.data)
-        // Get the subset of resources required for the node
-        const reqResources = _.pick(resources, initialized)
         // Callback to update state
         const updateState = events.updateState
         // Get node state. Will only be present if resuming.
@@ -239,7 +190,6 @@ const _runTopology: RunTopologyInternal = (spec, snapshot, dag, context) => {
         // Run fn input
         const runInput: RunInput = {
           data,
-          resources: reqResources,
           updateState,
           state,
           context,
@@ -284,7 +234,7 @@ export const initSnapshotData = (dag: DAG, data?: any) => {
   )
   // Initialize data
   return noDepsNodes.reduce(
-    (acc, node) => _.set([node, 'input'], data, acc),
+    (acc, node) => _.set([node, 'input'], [data], acc),
     {}
   )
 }
@@ -300,20 +250,24 @@ export const initSnapshotData = (dag: DAG, data?: any) => {
  * every time the topology snapshot updates. Events include: data, error, and
  * done.
  */
-export const runTopology: RunTopology = (spec, inputDag, options) => {
+export const runTopology: RunTopology = (spec, options) => {
+  const _dag: DAG = _.mapValues<NodeDef, { deps: string[] }>(
+    _.omit('run'),
+    spec
+  )
   // Get the filtered dag
-  const dag = filterDAG(inputDag, options)
+  const dag = filterDAG(_dag, options)
   // Initialize snapshot data
   const data = initSnapshotData(dag, options?.data)
   // Initial snapshot
   const snapshot: Snapshot = {
     status: 'running',
     started: new Date(),
-    dag,
+    dag: dag,
     data,
   }
   // Run the topology
-  return _runTopology(spec, snapshot, dag, options?.context)
+  return _runTopology(spec, dag, snapshot, options?.context)
 }
 
 /**
@@ -365,5 +319,5 @@ export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)
   // Run the topology
-  return _runTopology(spec, snap, snap.dag, options?.context)
+  return _runTopology(spec, snap.dag, snap, options?.context)
 }

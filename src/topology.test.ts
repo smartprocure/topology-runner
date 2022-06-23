@@ -4,13 +4,11 @@ import {
   getInputData,
   filterDAG,
   getNodesReadyToRun,
-  initResources,
   initSnapshotData,
   runTopology,
   resumeTopology,
   getResumeSnapshot,
   TopologyError,
-  cleanupResources,
 } from './topology'
 import { DAG, RunFn, Snapshot, Spec } from './types'
 import timers from 'timers/promises'
@@ -23,42 +21,27 @@ const dag: DAG = {
 }
 
 const spec: Spec = {
-  resources: {
-    elasticCloud: {
-      init: async () => 'elastic',
-    },
-    mongoDb: {
-      init: async () => 'mongo',
-    },
-    config: {
-      init() {
-        return { host: 'localhost' }
-      },
+  api: {
+    deps: [],
+    run: async () => [1, 2, 3],
+  },
+  details: {
+    deps: ['api'],
+    run: async ({ data }) => {
+      const ids: number[] = data[0]
+      return ids.reduce((acc, n) => _.set(n, `description ${n}`, acc), {})
     },
   },
-  nodes: {
-    api: {
-      run: async () => [1, 2, 3],
-      resources: ['elasticCloud'],
+  attachments: {
+    deps: ['api'],
+    run: async ({ data }) => {
+      const ids: number[] = data[0]
+      return ids.reduce((acc, n) => _.set(n, `file${n}.jpg`, acc), {})
     },
-    details: {
-      run: async ({ data }) => {
-        const ids: number[] = data[0]
-        return ids.reduce((acc, n) => _.set(n, `description ${n}`, acc), {})
-      },
-      resources: ['elasticCloud', 'mongo'],
-    },
-    attachments: {
-      run: async ({ data }) => {
-        const ids: number[] = data[0]
-        return ids.reduce((acc, n) => _.set(n, `file${n}.jpg`, acc), {})
-      },
-      resources: [],
-    },
-    writeToDB: {
-      run: async () => null,
-      resources: ['mongo', 'config'],
-    },
+  },
+  writeToDB: {
+    deps: ['details', 'attachments'],
+    run: async () => null,
   },
 }
 
@@ -188,54 +171,6 @@ describe('getNodesReadyToRun', () => {
   })
 })
 
-describe('initResources', () => {
-  test('resources initialized', async () => {
-    expect(
-      await initResources(spec, ['elasticCloud', 'mongoDb', 'config'])
-    ).toEqual({
-      elasticCloud: 'elastic',
-      mongoDb: 'mongo',
-      config: { host: 'localhost' },
-    })
-  })
-})
-
-describe('cleanupResources', () => {
-  test('clean up initialized resources', async () => {
-    const cleanedUp: any[] = []
-    const cleanup = (x: any) => {
-      cleanedUp.push(x)
-    }
-
-    const spec: Spec = {
-      resources: {
-        elasticCloud: {
-          init: async () => 'elastic',
-          cleanup: async (x: any) => cleanup(x),
-        },
-        mongoDb: {
-          init: async () => 'mongo',
-          cleanup: (x: any) => cleanup(x),
-        },
-        config: {
-          init() {
-            return { host: 'localhost' }
-          },
-        },
-      },
-      nodes: {},
-    }
-
-    const initialized = await initResources(spec, [
-      'elasticCloud',
-      'mongoDb',
-      'config',
-    ])
-    await cleanupResources(spec, initialized)
-    expect(cleanedUp).toEqual(['elastic', 'mongo'])
-  })
-})
-
 describe('getInputData', () => {
   test('single dep', () => {
     const input = getInputData(dag, 'details', {
@@ -305,7 +240,7 @@ describe('getInputData', () => {
 describe('initData', () => {
   test('data passed', () => {
     expect(initSnapshotData(dag, [1, 2, 3])).toEqual({
-      api: { input: [1, 2, 3] },
+      api: { input: [[1, 2, 3]] },
     })
   })
   test('data empty', () => {
@@ -315,60 +250,42 @@ describe('initData', () => {
 
 describe('runTopology', () => {
   test('nodes receive expected input', async () => {
-    const dag = {
-      api: { deps: [] },
-      details: { deps: ['api'] },
-    }
     const spec: Spec = {
-      resources: {
-        elasticCloud: {
-          init: async () => 'elastic',
-        },
-        mongoDb: {
-          init: async () => 'mongo',
-        },
+      api: {
+        deps: [],
+        run: async ({ data, context }) => ({
+          data,
+          context,
+        }),
       },
-      nodes: {
-        api: {
-          run: async ({ data, resources, context }) => ({
-            data,
-            resources,
-            context,
-          }),
-          resources: ['elasticCloud'],
-        },
-        details: {
-          run: async ({ data, resources, context }) => ({
-            data,
-            resources,
-            context,
-          }),
-          resources: ['mongoDb'],
-        },
+      details: {
+        deps: ['api'],
+        run: async ({ data, context }) => ({
+          data,
+          context,
+        }),
       },
     }
     const data = [1, 2, 3]
     const context = { launchMissleCode: 1234 }
-    const { promise, getSnapshot } = runTopology(spec, dag, { data, context })
+    const { promise, getSnapshot } = runTopology(spec, { data, context })
     await promise
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
       dag: { api: { deps: [] }, details: { deps: ['api'] } },
       data: {
         api: {
-          input: [1, 2, 3],
+          input: [[1, 2, 3]],
           status: 'completed',
           output: {
-            data: [1, 2, 3],
-            resources: { elasticCloud: 'elastic' },
+            data: [[1, 2, 3]],
             context: { launchMissleCode: 1234 },
           },
         },
         details: {
           input: [
             {
-              data: [1, 2, 3],
-              resources: { elasticCloud: 'elastic' },
+              data: [[1, 2, 3]],
               context: { launchMissleCode: 1234 },
             },
           ],
@@ -376,42 +293,15 @@ describe('runTopology', () => {
           output: {
             data: [
               {
-                data: [1, 2, 3],
-                resources: { elasticCloud: 'elastic' },
+                data: [[1, 2, 3]],
                 context: { launchMissleCode: 1234 },
               },
             ],
-            resources: { mongoDb: 'mongo' },
             context: { launchMissleCode: 1234 },
           },
         },
       },
     })
-  })
-  test('bad arguments', () => {
-    const dag = {
-      api: { deps: [] },
-      details: { deps: ['api'] },
-      attachments: { deps: ['api'] },
-      writeToDB: { deps: ['details', 'attachments'] },
-    }
-    const spec: Spec = {
-      nodes: {
-        api: {
-          run: async () => [1, 2, 3],
-        },
-        attachments: {
-          run: async () => 2,
-        },
-      },
-    }
-    expect(() => {
-      runTopology(spec, dag)
-    }).toThrow(
-      new TopologyError(
-        'Missing the following nodes in spec: details, writeToDB'
-      )
-    )
   })
   test('completed', async () => {
     const { promise, getSnapshot } = runTopology(spec, dag)
@@ -468,33 +358,17 @@ describe('runTopology', () => {
     })
   })
   test('gracefully shutdown when stop is called', async () => {
-    const cleanedUp: any[] = []
-    const cleanup = (x: any) => {
-      cleanedUp.push(x)
-    }
-
-    const dag: DAG = {
-      api: { deps: [] },
-    }
     const spec: Spec = {
-      resources: {
-        elasticCloud: {
-          init: async () => 'elastic',
-          cleanup: async (x: any) => cleanup(x),
-        },
-      },
-      nodes: {
-        api: {
-          run: async ({ signal, updateState }) => {
-            for (let i = 0; i < 5; i++) {
-              if (signal.aborted) {
-                throw new Error('Aborted')
-              }
-              await timers.setTimeout(100)
-              updateState({ index: i })
+      api: {
+        deps: [],
+        run: async ({ signal, updateState }) => {
+          for (let i = 0; i < 5; i++) {
+            if (signal.aborted) {
+              throw new Error('Aborted')
             }
-          },
-          resources: ['elasticCloud'],
+            await timers.setTimeout(100)
+            updateState({ index: i })
+          }
         },
       },
     }
@@ -511,12 +385,10 @@ describe('runTopology', () => {
           input: [],
           status: 'errored',
           state: { index: 1 },
-          error: 'Error: Aborted',
+          error: expect.stringContaining('Error: Aborted'),
         },
       },
     })
-    // Resources cleaned up
-    expect(cleanedUp).toEqual(['elastic'])
   })
 })
 
@@ -625,7 +497,7 @@ describe('resumeTopology', () => {
     }
     return output
   }
-  const modifiedSpec = _.set('nodes.attachments.run', attachmentsRun, spec)
+  const modifiedSpec = _.set('attachments.run', attachmentsRun, spec)
 
   test('resume after initial error', async () => {
     const { promise, getSnapshot } = runTopology(modifiedSpec, dag)
@@ -657,7 +529,7 @@ describe('resumeTopology', () => {
         attachments: {
           input: [[1, 2, 3]],
           status: 'errored',
-          error: 'Error: Failed processing id: 2',
+          error: expect.stringContaining('Error: Failed processing id: 2'),
           state: {
             index: 0,
             output: {
@@ -733,14 +605,12 @@ describe('resumeTopology', () => {
           status: 'completed',
           output: {
             data: [1, 2, 3],
-            resources: { elasticCloud: 'elastic' },
           },
         },
         details: {
           input: [
             {
               data: [1, 2, 3],
-              resources: { elasticCloud: 'elastic' },
             },
           ],
           status: 'completed',
@@ -748,10 +618,8 @@ describe('resumeTopology', () => {
             data: [
               {
                 data: [1, 2, 3],
-                resources: { elasticCloud: 'elastic' },
               },
             ],
-            resources: { mongoDb: 'mongo' },
           },
         },
       },
