@@ -1,3 +1,9 @@
+# 0.7.0
+
+* Spec includes `deps` so you can just pass one object.
+* Get error stacktrace if available.
+* Wrap initial input data in an array to match other nodes.
+
 # 0.6.0
 
 * Handle empty snapshot when resuming.
