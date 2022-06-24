@@ -3,7 +3,7 @@
 ## runTopology
 
 ```typescript
-runTopology(spec: Spec, inputDag: DAG, options?: Options) => Response
+runTopology(spec: Spec, options?: Options) => Response
 
 type Response = {
   emitter: EventEmitter<Events,any>,
@@ -12,14 +12,12 @@ type Response = {
 }
 ```
 
-Run a topology consisting of a DAG (directed acyclic graph) and a spec,
-which is a list of nodes that corresponds to the nodes in the DAG.
+Run a topology consisting of a DAG (directed acyclic graph).
 
 Nodes have a `run` fn that takes an object with the following shape:
 
 ```typescript
 interface RunInput {
-  resources: Record<string, any>
   data: any
   updateState: UpdateState
   state?: any
@@ -28,10 +26,6 @@ interface RunInput {
   signal: AbortSignal
 }
 ```
-
-A list of named `resources` will be lazy-loaded and passed, if requested.
-`data` will be the initial data passed via `options.data` for nodes with no
-dependencies or an array of the outputs of the dependencies.
 
 The flow of a DAG begins with nodes with no dependencies. More generally,
 when a node's dependencies are met it will be run. Data does does not flow incrementally.
@@ -51,110 +45,86 @@ To gracefully shut down a topology call the `stop` function and handle the abort
 in your run functions by throwing an exception.
 
 ```typescript
-import { runTopology, DAG, Spec } from 'topology-runner'
+import { runTopology, Spec } from 'topology-runner'
 import { setTimeout } from 'node:timers/promises'
 
-const dag: DAG = {
-  api: { deps: [] },
-  details: { deps: ['api'] },
-  attachments: { deps: ['api'] },
-  writeToDB: { deps: ['details', 'attachments'] },
-}
-
 const spec: Spec = {
-  resources: {
-    elasticCloud: {
-      init: async () => 'elastic',
-    },
-    mongoDb: {
-      init: async () => 'mongo',
-    },
-    config: {
-      init() {
-        return {
-          detailsHost: 'https://getsomedetails.org',
-          attachmentsHost: 'https://getsomeattachments.com',
-        }
-      },
+  api: {
+    deps: [],
+    run: async () => [1, 2, 3],
+  },
+  details: {
+    deps: ['api'],
+    run: async ({ data, state, updateState }) => {
+      data = data.flat()
+      const ids: number[] = state ? data.slice(state.index + 1) : data
+      const output: Record<number, string> = state ? state.output : {}
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        // Simulate work
+        await setTimeout(10)
+        // Real world scenario below
+        // const description = await fetch(someUrl)
+        output[id] = `description ${id}`
+        // Update the state for resume scenario
+        updateState({ index: i, output })
+      }
+      return output
     },
   },
-  nodes: {
-    api: {
-      run: async () => [1, 2, 3],
+  attachments: {
+    deps: ['api'],
+    run: async ({ data, state, updateState }) => {
+      data = data.flat()
+      const ids: number[] = state ? data.slice(state.index + 1) : data
+      const output: Record<number, string> = state ? state.output : {}
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        // Simulate work
+        await setTimeout(8)
+        // Real world scenario below
+        // const attachment = await fetch(someUrl)
+        output[id] = `file${id}.jpg`
+        // Update the state for resume scenario
+        updateState({ index: i, output })
+      }
+      return output
     },
-    details: {
-      run: async ({ data, state, resources, updateState }) => {
-        data = data.flat()
-        const ids: number[] = state ? data.slice(state.index + 1) : data
-        const output: Record<number, string> = state ? state.output : {}
+  },
+  writeToDB: {
+    deps: ['details', 'attachments'],
+    // Time out after 5 minutes
+    // Abort signal will abort below causing the promise to reject
+    timeout: 1000 * 60 * 5,
+    run: async ({ data, state, updateState, signal }) => {
+      const [details, attachments] = data
+      const keys = Object.keys(details)
+      const ids = state ? keys.slice(state.index + 1) : keys
 
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i]
-          // Simulate work
-          await setTimeout(10)
-          // Real world scenario below
-          // const description = await fetch(resources.detailsHost)
-          output[id] = `description ${id}`
-          // Update the state for resume scenario
-          updateState({ index: i, output })
+      for (let i = 0; i < ids.length; i++) {
+        // Throw if timeout occurred
+        if (signal.aborted) {
+          throw new Error('Timed out')
         }
-        return output
-      },
-      resources: ['config'],
-    },
-    attachments: {
-      run: async ({ data, state, updateState }) => {
-        data = data.flat()
-        const ids: number[] = state ? data.slice(state.index + 1) : data
-        const output: Record<number, string> = state ? state.output : {}
 
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i]
-          // Simulate work
-          await setTimeout(8)
-          // Real world scenario below
-          // const attachment = await fetch(resources.attachmentsHost)
-          output[id] = `file${id}.jpg`
-          // Update the state for resume scenario
-          updateState({ index: i, output })
-        }
-        return output
-      },
-      resources: ['config'],
-    },
-    writeToDB: {
-      // Time out after 5 minutes
-      // Abort signal will abort below causing the promise to reject
-      timeout: 1000 * 60 * 5,
-      run: async ({ data, resources, state, updateState, signal }) => {
-        const [details, attachments] = data
-        const keys = Object.keys(details)
-        const ids = state ? keys.slice(state.index + 1) : keys
-
-        for (let i = 0; i < ids.length; i++) {
-          // Throw if timeout occurred
-          if (signal.aborted) {
-            throw new Error('Timed out')
-          }
-
-          // Simulate work
-          await setTimeout(50)
-          const id = ids[i]
-          const detail = details[id]
-          const attachment = attachments[id]
-          const doc = { detail, attachment }
-          // Write to datastore
-          // await resources.mongo.collection('someColl').insertOne(doc)
-          // Update the state for resume scenario
-          updateState({ index: i })
-        }
-      },
-      resources: ['mongo'],
+        // Simulate work
+        await setTimeout(50)
+        const id = ids[i]
+        const detail = details[id]
+        const attachment = attachments[id]
+        const doc = { detail, attachment }
+        // Write to datastore
+        // await mongo.collection('someColl').insertOne(doc)
+        // Update the state for resume scenario
+        updateState({ index: i })
+      }
     },
   },
 }
 
-const { emitter, promise, getSnapshot } = runTopology(spec, dag)
+const { emitter, promise, getSnapshot } = runTopology(spec)
 
 const persistSnapshot = (snapshot) => {
   // Could be Redis, MongoDB, etc.
@@ -269,15 +239,10 @@ The computed DAG after either including or excluding nodes will be outputted
 with the snapshot, making it easy to resume that topology.
 
 ```typescript
-const dag: DAG = {
-  downloadFile: { deps: [] },
-  processFile: { deps: ['download'] },
-}
-
 // Using includeNodes
-runTopology(spec, dag, { includeNodes: ['processFile'], data: ['123', '456'] })
+runTopology(spec, { includeNodes: ['processFile'], data: ['123', '456'] })
 // Using excludeNodes
-runTopology(spec, dag, { excludeNodes: ['downloadFile'], data: ['123', '456'] })
+runTopology(spec, { excludeNodes: ['downloadFile'], data: ['123', '456'] })
 ```
 
 ## resumeTopology
