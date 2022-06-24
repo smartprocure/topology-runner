@@ -395,7 +395,7 @@ describe('runTopology', () => {
           input: [],
           status: 'errored',
           state: { index: 1 },
-          error: expect.stringContaining('Error: Aborted'),
+          error: { stack: expect.stringContaining('Error: Aborted') },
         },
       },
     })
@@ -527,7 +527,9 @@ describe('resumeTopology', () => {
           deps: ['api'],
           input: [[1, 2, 3]],
           status: 'errored',
-          error: expect.stringContaining('Error: Failed processing id: 2'),
+          error: {
+            stack: expect.stringContaining('Error: Failed processing id: 2'),
+          },
           state: {
             index: 0,
             output: {

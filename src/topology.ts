@@ -60,8 +60,8 @@ export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
   const nodes: string[] = []
   for (const node in dag) {
     const { deps } = dag[node]
-    // The status is not set for the node on the snapshot or status is pending
-    const isPending = !data[node]?.status || data[node]?.status === 'pending'
+    // The node does not exist or status is pending
+    const isPending = !data[node] || data[node].status === 'pending'
     // Dependencies for the node are all completed and the node is currently
     // pending.
     if (_.difference(deps, completed).length === 0 && isPending) {
@@ -79,7 +79,7 @@ export const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
   if (_.has([node, 'input'], data)) {
     return _.get([node, 'input'], data)
   }
-  // Node deps
+  // Input is the output of the node's dependencies
   const deps = dag[node].deps
   return deps.map((dep) => _.get([dep, 'output'], data))
 }
@@ -112,7 +112,6 @@ const nodeEventHandler = (
     snapshot.data[node].output = output
     snapshot.data[node].status = 'completed'
     snapshot.data[node].finished = new Date()
-    delete snapshot.data[node].error
     // Emit
     emitter.emit('data', snapshot)
   }
@@ -120,7 +119,9 @@ const nodeEventHandler = (
     // Update snapshot
     snapshot.data[node].status = 'errored'
     snapshot.data[node].finished = new Date()
-    snapshot.data[node].error = error.stack || error
+    // Capture stack and any abritrary properties if instance of Error
+    snapshot.data[node].error =
+      error instanceof Error ? { ...error, stack: error.stack } : error
     // Emit
     emitter.emit('data', snapshot)
   }
@@ -219,20 +220,21 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   return { emitter, promise: run(), getSnapshot, stop }
 }
 
+const getNodesWithNoDeps = (dag: DAG) =>
+  findKeys(({ deps }: { deps: string[] }) => _.isEmpty(deps), dag)
+
 /**
  * Set input for nodes with no dependencies to data, if exists.
  */
 export const initSnapshotData = (dag: DAG, data?: any): SnapshotData => {
   // Get nodes with no dependencies
-  const noDepsNodes = findKeys(
-    ({ deps }: { deps: string[] }) => _.isEmpty(deps),
-    dag
-  )
+  const noDepsNodes = getNodesWithNoDeps(dag)
 
   const snapshotData: SnapshotData = {}
 
   for (const node in dag) {
     snapshotData[node] = { ...dag[node], status: 'pending' }
+    // Data exists and node has no dependencies:w
     if (data !== undefined && noDepsNodes.includes(node)) {
       snapshotData[node].input = [data]
     }
