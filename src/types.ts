@@ -30,15 +30,15 @@ export interface Options {
 }
 
 export type Response = {
-  emitter: EventEmitter<Events, any>
-  promise: Promise<void>
-  getSnapshot(): Snapshot
+  start(): Promise<void>
   stop(): void
+  emitter: EventEmitter<Events, any>
+  getSnapshot(): Snapshot
 }
 export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 export interface NodeData {
-  deps: string[],
+  deps: string[]
   status: Status
   started?: Date
   finished?: Date
@@ -61,10 +61,7 @@ export type ObjectOfPromises = Record<string | number, Promise<any>>
 
 export type Events = 'data' | 'error' | 'done'
 
-export type RunTopology = (
-  spec: Spec,
-  options?: Options
-) => Response
+export type RunTopology = (spec: Spec, options?: Options) => Response
 
 export type RunTopologyInternal = (
   spec: Spec,

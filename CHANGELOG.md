@@ -1,3 +1,7 @@
+# 0.8.0
+
+* BREAKING CHANGE: Changed `promise` to `start` fn.
+
 # 0.7.0
 
 * Spec includes `deps` so you can just pass one object.

@@ -290,8 +290,8 @@ describe('runTopology', () => {
     }
     const data = [1, 2, 3]
     const context = { launchMissleCode: 1234 }
-    const { promise, getSnapshot } = runTopology(spec, { data, context })
-    await promise
+    const { start, getSnapshot } = runTopology(spec, { data, context })
+    await start()
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
       data: {
@@ -325,8 +325,8 @@ describe('runTopology', () => {
     })
   })
   test('completed', async () => {
-    const { promise, getSnapshot } = runTopology(spec, dag)
-    await promise
+    const { start, getSnapshot } = runTopology(spec, dag)
+    await start()
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
       data: {
@@ -384,9 +384,9 @@ describe('runTopology', () => {
       },
     }
 
-    const { promise, getSnapshot, stop } = runTopology(spec, dag)
+    const { start, stop, getSnapshot } = runTopology(spec, dag)
     setTimeout(stop, 200)
-    await expect(promise).rejects.toThrow('Errored nodes: ["api"]')
+    await expect(start()).rejects.toThrow('Errored nodes: ["api"]')
     // Node errored
     expect(getSnapshot()).toMatchObject({
       status: 'errored',
@@ -501,8 +501,8 @@ describe('resumeTopology', () => {
   const modifiedSpec = _.set('attachments.run', attachmentsRun, spec)
 
   test('resume after initial error', async () => {
-    const { promise, getSnapshot } = runTopology(modifiedSpec, dag)
-    await expect(promise).rejects.toThrow('Errored nodes: ["attachments"]')
+    const { start, getSnapshot } = runTopology(modifiedSpec, dag)
+    await expect(start()).rejects.toThrow('Errored nodes: ["attachments"]')
     const snapshot = getSnapshot()
     expect(snapshot).toMatchObject({
       status: 'errored',
@@ -539,9 +539,11 @@ describe('resumeTopology', () => {
         },
       },
     })
-    const { promise: promise2, getSnapshot: getSnapshot2 } =
-      await resumeTopology(modifiedSpec, snapshot)
-    await promise2
+    const { start: start2, getSnapshot: getSnapshot2 } = await resumeTopology(
+      modifiedSpec,
+      snapshot
+    )
+    await start2()
     expect(getSnapshot2()).toMatchObject({
       status: 'completed',
       data: {
@@ -623,8 +625,8 @@ describe('resumeTopology', () => {
         },
       },
     }
-    const { promise, getSnapshot } = resumeTopology(spec, snapshot)
-    await promise
+    const { start, getSnapshot } = resumeTopology(spec, snapshot)
+    await start()
     expect(getSnapshot()).toEqual(snapshot)
   })
   test('should throw if snapshot is undefined', async () => {
