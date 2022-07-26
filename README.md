@@ -6,9 +6,10 @@
 runTopology(spec: Spec, options?: Options) => Response
 
 type Response = {
-  emitter: EventEmitter<Events,any>,
-  promise: Promise<Snapshot>,
-  getSnapshot: () => Snapshot
+  start(): Promise<void>
+  stop(): void
+  emitter: EventEmitter<Events, any>
+  getSnapshot(): Snapshot
 }
 ```
 
@@ -124,7 +125,7 @@ const spec: Spec = {
   },
 }
 
-const { emitter, promise, getSnapshot } = runTopology(spec)
+const { start, emitter, getSnapshot } = runTopology(spec)
 
 const persistSnapshot = (snapshot) => {
   // Could be Redis, MongoDB, etc.
@@ -137,7 +138,7 @@ emitter.on('data', persistSnapshot)
 
 try {
   // Wait for the topology to finish
-  await promise
+  await start()
 } finally {
   // Persist the final snapshot
   await persistSnapshot(getSnapshot())
@@ -249,12 +250,6 @@ runTopology(spec, { excludeNodes: ['downloadFile'], data: ['123', '456'] })
 
 ```typescript
 resumeTopology(spec: Spec, snapshot: Snapshot) => Response
-
-type Response = {
-  emitter: EventEmitter<Events,any>,
-  promise: Promise<Snapshot>,
-  getSnapshot: () => Snapshot
-}
 ```
 
 Allows you to resume a topology from a previously emitted snapshot.
@@ -263,8 +258,8 @@ Each node should maintain its state via the `updateState` callback.
 ```typescript
 import { resumeTopology } from 'topology-runner'
 
-const { emitter, promise } = resumeTopology(spec, snapshot)
-await promise
+const { start, emitter } = resumeTopology(spec, snapshot)
+await start()
 ```
 
 Below is an example snapshot where an error occurred. The DAG

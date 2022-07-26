@@ -146,10 +146,11 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   const promises: ObjectOfPromises = {}
   // Event emitter
   const emitter = new EventEmitter<Events>()
-  // Emit initial snapshot
-  emitter.emit('data', snapshot)
 
-  const run = async () => {
+  const start = async () => {
+    // Emit initial snapshot
+    emitter.emit('data', snapshot)
+    // Loop
     while (true) {
       // Get nodes with resolved dependencies that have not been run
       const readyToRunNodes = abortController.signal.aborted
@@ -217,7 +218,7 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
     abortController.abort()
   }
 
-  return { emitter, promise: run(), getSnapshot, stop }
+  return { start, stop, emitter, getSnapshot }
 }
 
 const getNodesWithNoDeps = (dag: DAG) =>
@@ -316,7 +317,7 @@ export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
     const getSnapshot = () => snapshot
     /* eslint-disable-next-line */
     const stop = () => {}
-    return { emitter, promise: Promise.resolve(), getSnapshot, stop }
+    return { start: () => Promise.resolve(), stop, emitter, getSnapshot }
   }
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)
