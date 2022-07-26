@@ -35,7 +35,7 @@ export type Response = {
   emitter: EventEmitter<Events, any>
   getSnapshot(): Snapshot
 }
-export type Status = 'pending' | 'running' | 'completed' | 'errored' | 'aborted'
+export type Status = 'pending' | 'running' | 'completed' | 'errored'
 
 export interface NodeData {
   deps: string[]
