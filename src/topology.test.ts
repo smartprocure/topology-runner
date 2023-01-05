@@ -14,10 +14,10 @@ import { DAG, RunFn, Snapshot, Spec } from './types'
 import timers from 'timers/promises'
 
 const dag: DAG = {
-  api: { deps: [] },
-  details: { deps: ['api'] },
-  attachments: { deps: ['api'] },
-  writeToDB: { deps: ['details', 'attachments'] },
+  api: { deps: [], type: 'work' },
+  details: { deps: ['api'], type: 'work' },
+  attachments: { deps: ['api'], type: 'work' },
+  writeToDB: { deps: ['details', 'attachments'], type: 'work' },
 }
 
 const spec: Spec = {

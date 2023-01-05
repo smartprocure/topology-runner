@@ -3,23 +3,62 @@ import EventEmitter from 'eventemitter3'
 type UpdateState = (state: any) => void
 export type Initialized = Record<string, any>
 
-export interface RunInput {
+export interface BaseInput {
   data: any
+  node: string
+  context?: any
+}
+
+// Work
+export interface WorkInput extends BaseInput {
   updateState: UpdateState
   state?: any
-  context?: any
-  node: string
   signal: AbortSignal
 }
 
-export type RunFn = (arg: RunInput) => Promise<any>
+export type WorkOutput = Promise<any>
 
-export interface NodeDef {
+export type RunFn = (arg: WorkInput) => WorkOutput
+
+export interface WorkNodeDef {
   run: RunFn
   deps: string[]
+  type?: 'work'
 }
 
-export type DAG = Record<string, { deps: string[] }>
+// Branching
+export interface BranchingInput extends BaseInput {
+  branch: (node: string, reason?: string) => BranchingOutput
+  none: (reason?: string) => BranchingOutput
+}
+
+export interface BranchingOutput {
+  node: string | symbol
+  reason?: string
+}
+
+export interface BranchingNodeDef {
+  run: (arg: BranchingInput) => BranchingOutput
+  deps: string[]
+  type: 'branching'
+}
+
+// Suspension
+export type SuspensionInput = WorkInput
+export type SuspensionOutput = Promise<void>
+
+export interface SuspensionNodeDef {
+  run: (arg: SuspensionInput) => SuspensionOutput
+  deps: string[]
+  type: 'suspension'
+}
+
+export type NodeType = 'work' | 'branching' | 'suspension'
+export type Input = BranchingInput | SuspensionInput | WorkInput
+export type Output = BranchingOutput | SuspensionOutput | WorkOutput
+export type NodeDef = BranchingNodeDef | SuspensionNodeDef | WorkNodeDef
+
+export type DAG = Record<string, { deps: string[], type: NodeType }>
 export type Spec = Record<string, NodeDef>
 
 export interface Options {
@@ -35,17 +74,27 @@ export type Response = {
   emitter: EventEmitter<Events, any>
   getSnapshot(): Snapshot
 }
-export type Status = 'pending' | 'running' | 'completed' | 'errored'
+
+export type Status =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'suspended'
+  | 'errored'
+
+export type NodeStatus = Status | 'skipped'
 
 export interface NodeData {
+  type: NodeType,
   deps: string[]
-  status: Status
+  status: NodeStatus
   started?: Date
   finished?: Date
   input?: any
   output?: any
   state?: any
   error?: any
+  reason?: string
 }
 
 export type SnapshotData = Record<string, NodeData>
