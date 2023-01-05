@@ -48,15 +48,15 @@ const spec: Spec = {
 describe('filterDAG', () => {
   test('exclude nodes', () => {
     expect(filterDAG(dag, { excludeNodes: ['api'] })).toEqual({
-      details: { deps: [] },
-      attachments: { deps: [] },
-      writeToDB: { deps: ['details', 'attachments'] },
+      details: { deps: [], type: 'work' },
+      attachments: { deps: [], type: 'work' },
+      writeToDB: { deps: ['details', 'attachments'], type: 'work' },
     })
   })
   test('include nodes', () => {
     expect(filterDAG(dag, { includeNodes: ['details', 'writeToDB'] })).toEqual({
-      details: { deps: [] },
-      writeToDB: { deps: ['details'] },
+      details: { deps: [], type: 'work' },
+      writeToDB: { deps: ['details'], type: 'work' },
     })
   })
   test('no options', () => {
@@ -65,15 +65,10 @@ describe('filterDAG', () => {
 })
 
 describe('getNodesReadyToRun', () => {
-  const dag = {
-    api: { deps: [] },
-    details: { deps: ['api'] },
-    attachments: { deps: ['api'] },
-    writeToDB: { deps: ['details', 'attachments'] },
-  }
   test('resume - pending', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'pending',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -88,6 +83,7 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -104,6 +100,7 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed and running', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -115,6 +112,7 @@ describe('getNodesReadyToRun', () => {
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'running',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -126,6 +124,7 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed and errored', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -137,6 +136,7 @@ describe('getNodesReadyToRun', () => {
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'errored',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -148,6 +148,7 @@ describe('getNodesReadyToRun', () => {
   test('deps not met', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -159,6 +160,7 @@ describe('getNodesReadyToRun', () => {
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -166,6 +168,7 @@ describe('getNodesReadyToRun', () => {
         output: { '123': 'foo', '456': 'bar' },
       },
       attachments: {
+        type: 'work',
         deps: ['api'],
         status: 'errored',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -184,6 +187,7 @@ describe('getInputData', () => {
   test('single dep', () => {
     const input = getInputData(dag, 'details', {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -200,6 +204,7 @@ describe('getInputData', () => {
   test('multiple deps', () => {
     const input = getInputData(dag, 'writeToDB', {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -211,6 +216,7 @@ describe('getInputData', () => {
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -219,6 +225,7 @@ describe('getInputData', () => {
         output: { 123: { description: 'foo' } },
       },
       attachments: {
+        type: 'work',
         deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -235,6 +242,7 @@ describe('getInputData', () => {
   test('resume scenario', () => {
     const input = getInputData(dag, 'api', {
       api: {
+        type: 'work',
         deps: [],
         status: 'pending',
         input: {
@@ -254,18 +262,26 @@ describe('getInputData', () => {
 describe('initData', () => {
   test('data passed', () => {
     expect(initSnapshotData(dag, [1, 2, 3])).toEqual({
-      api: { deps: [], status: 'pending', input: [[1, 2, 3]] },
-      details: { deps: ['api'], status: 'pending' },
-      attachments: { deps: ['api'], status: 'pending' },
-      writeToDB: { deps: ['details', 'attachments'], status: 'pending' },
+      api: { deps: [], status: 'pending', input: [[1, 2, 3]], type: 'work' },
+      details: { deps: ['api'], status: 'pending', type: 'work' },
+      attachments: { deps: ['api'], status: 'pending', type: 'work' },
+      writeToDB: {
+        deps: ['details', 'attachments'],
+        status: 'pending',
+        type: 'work',
+      },
     })
   })
   test('data empty', () => {
     expect(initSnapshotData(dag)).toEqual({
-      api: { deps: [], status: 'pending' },
-      details: { deps: ['api'], status: 'pending' },
-      attachments: { deps: ['api'], status: 'pending' },
-      writeToDB: { deps: ['details', 'attachments'], status: 'pending' },
+      api: { deps: [], status: 'pending', type: 'work' },
+      details: { deps: ['api'], status: 'pending', type: 'work' },
+      attachments: { deps: ['api'], status: 'pending', type: 'work' },
+      writeToDB: {
+        deps: ['details', 'attachments'],
+        status: 'pending',
+        type: 'work',
+      },
     })
   })
 })
@@ -410,6 +426,7 @@ describe('getResumeSnapshot', () => {
       finished: new Date('2020-01-01T00:00:01Z'),
       data: {
         api: {
+          type: 'work',
           deps: [],
           started: new Date('2020-01-01T00:00:00Z'),
           finished: new Date('2020-01-01T00:00:01Z'),
@@ -418,6 +435,7 @@ describe('getResumeSnapshot', () => {
           output: [1, 2, 3],
         },
         details: {
+          type: 'work',
           deps: ['api'],
           started: new Date('2020-01-01T00:00:00Z'),
           finished: new Date('2020-01-01T00:00:01Z'),
@@ -430,6 +448,7 @@ describe('getResumeSnapshot', () => {
           },
         },
         attachments: {
+          type: 'work',
           deps: ['api'],
           started: new Date('2020-01-01T00:00:00Z'),
           input: [[1, 2, 3]],
@@ -600,6 +619,7 @@ describe('resumeTopology', () => {
       status: 'completed',
       data: {
         api: {
+          type: 'work',
           deps: [],
           input: [1, 2, 3],
           status: 'completed',
@@ -608,6 +628,7 @@ describe('resumeTopology', () => {
           },
         },
         details: {
+          type: 'work',
           deps: ['api'],
           input: [
             {
