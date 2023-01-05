@@ -37,6 +37,33 @@ const suspensionDag: DAG = {
   email: { deps: ['authorization'], type: 'work' },
 }
 
+const suspensionSpec: Spec = {
+  input: { deps: [], type: 'work', run: async () => 'Southern California' },
+  lookupA: {
+    deps: ['input'],
+    type: 'work',
+    run: async () => ({
+      creditScore: 750,
+    }),
+  },
+  lookupB: {
+    deps: ['input'],
+    type: 'work',
+    run: async () => ({ risk: 'low' }),
+  },
+  authorization: {
+    deps: ['lookupA', 'lookupB'],
+    type: 'suspension',
+  },
+  email: {
+    deps: ['authorization'],
+    type: 'work',
+    run: async () => ({
+      success: true,
+    }),
+  },
+}
+
 const spec: Spec = {
   api: {
     deps: [],
@@ -420,7 +447,7 @@ describe('runTopology', () => {
     })
   })
   test('completed', async () => {
-    const { start, getSnapshot } = runTopology(spec, dag)
+    const { start, getSnapshot } = runTopology(spec)
     await start()
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
@@ -463,6 +490,56 @@ describe('runTopology', () => {
       },
     })
   })
+  test('suspend and resume', async () => {
+    const { start, getSnapshot } = runTopology(suspensionSpec)
+    await start()
+    const snapshot = getSnapshot()
+    expect(snapshot).toMatchObject({
+      status: 'suspended',
+      data: {
+        input: { deps: [], type: 'work', status: 'completed' },
+        lookupA: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        lookupB: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        authorization: {
+          deps: ['lookupA', 'lookupB'],
+          type: 'suspension',
+          status: 'completed',
+        },
+      },
+    })
+    const resume = resumeTopology(suspensionSpec, snapshot)
+    await resume.start()
+    expect(resume.getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        input: { deps: [], type: 'work', status: 'completed' },
+        lookupA: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        lookupB: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        authorization: {
+          deps: ['lookupA', 'lookupB'],
+          type: 'suspension',
+          status: 'completed',
+        },
+        email: { deps: ['authorization'], type: 'work', status: 'completed' },
+      },
+    })
+  })
   test('gracefully shutdown when stop is called', async () => {
     const spec: Spec = {
       api: {
@@ -479,7 +556,7 @@ describe('runTopology', () => {
       },
     }
 
-    const { start, stop, getSnapshot } = runTopology(spec, dag)
+    const { start, stop, getSnapshot } = runTopology(spec)
     setTimeout(stop, 200)
     await expect(start()).rejects.toThrow('Errored nodes: ["api"]')
     // Node errored
@@ -599,7 +676,7 @@ describe('resumeTopology', () => {
   const modifiedSpec = _.set('attachments.run', attachmentsRun, spec)
 
   test('resume after initial error', async () => {
-    const { start, getSnapshot } = runTopology(modifiedSpec, dag)
+    const { start, getSnapshot } = runTopology(modifiedSpec)
     await expect(start()).rejects.toThrow('Errored nodes: ["attachments"]')
     const snapshot = getSnapshot()
     expect(snapshot).toMatchObject({

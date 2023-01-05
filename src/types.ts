@@ -48,7 +48,7 @@ export type SuspensionInput = WorkInput
 export type SuspensionOutput = Promise<void>
 
 export interface SuspensionNodeDef {
-  run: (arg: SuspensionInput) => SuspensionOutput
+  run?: (arg: SuspensionInput) => SuspensionOutput
   deps: string[]
   type: 'suspension'
 }

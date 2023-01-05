@@ -124,7 +124,7 @@ const nodeEventHandler =
       // Emit
       emitter.emit('data', snapshot)
     }
-    const completed = (output: any) => {
+    const completed = (output?: any) => {
       // Update snapshot
       snapshot.data[node].output = output
       snapshot.data[node].status = 'completed'
@@ -192,6 +192,9 @@ const none = (reason?: string) => ({
   node: NONE,
   reason,
 })
+
+// eslint-disable-next-line
+const identity = async () => {}
 
 const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   const missingSpecNodes = getMissingSpecNodes(spec, dag)
@@ -261,6 +264,12 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
           node,
           context,
         }
+        const input = {
+          ...baseInput,
+          updateState,
+          state,
+          signal: abortController.signal,
+        }
         // Update snapshot
         events.running(data)
         // Get dependent nodes
@@ -282,20 +291,16 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
         }
         // Handle suspension and work node types
         else {
-          const input = {
-            ...baseInput,
-            updateState,
-            state,
-            signal: abortController.signal,
+          const handleSuspension = () => {
+            // Suspend all dependent nodes
+            dependents.forEach((node) => eventHandler(node).suspended())
+            // Set status to completed
+            events.completed()
           }
-          promises[node] = run(input)
-            .then((output) => {
-              if (type === 'suspension') {
-                // Suspend all dependent nodes
-                dependents.forEach((node) => eventHandler(node).suspended())
-              }
-              events.completed(output)
-            })
+          // The run fn may not exist for suspension node type
+          const runFn = run || identity
+          promises[node] = runFn(input)
+            .then(type === 'suspension' ? handleSuspension : events.completed)
             .catch(events.errored)
             .finally(() => {
               delete promises[node]
