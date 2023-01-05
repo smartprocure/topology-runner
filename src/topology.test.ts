@@ -20,6 +20,23 @@ const dag: DAG = {
   writeToDB: { deps: ['details', 'attachments'], type: 'work' },
 }
 
+const branchingDag: DAG = {
+  lookup: { deps: [], type: 'work' },
+  branch: { deps: ['lookup'], type: 'branching' },
+  branchA: { deps: ['branch'], type: 'work' },
+  branchB: { deps: ['branch'], type: 'work' },
+  foo: { deps: [], type: 'work' },
+  bar: { deps: ['branchA', 'foo'], type: 'work' },
+}
+
+const suspensionDag: DAG = {
+  input: { deps: [], type: 'work' },
+  lookupA: { deps: ['input'], type: 'work' },
+  lookupB: { deps: ['input'], type: 'work' },
+  authorization: { deps: ['lookupA', 'lookupB'], type: 'suspension' },
+  email: { deps: ['authorization'], type: 'work' },
+}
+
 const spec: Spec = {
   api: {
     deps: [],
@@ -239,6 +256,68 @@ describe('getInputData', () => {
       { 123: { file: 'foo.jpg' } },
     ])
   })
+  test('handle branching', () => {
+    const input = getInputData(branchingDag, 'branchA', {
+      lookup: {
+        type: 'work',
+        deps: [],
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: '123 Main St, Los Angeles, CA',
+        output: 'Southern California',
+      },
+      branch: {
+        type: 'branching',
+        deps: ['lookup'],
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: ['Southern California'],
+      },
+    })
+    expect(input).toEqual(['Southern California'])
+  })
+  test('handle suspension', () => {
+    const input = getInputData(suspensionDag, 'email', {
+      input: {
+        deps: [],
+        type: 'work',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: '123 Main St, Los Angeles, CA',
+        output: 'Southern California',
+      },
+      lookupA: {
+        deps: ['input'],
+        type: 'work',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: ['Southern California'],
+        output: { creditScore: 750 },
+      },
+      lookupB: {
+        deps: ['input'],
+        type: 'work',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: ['Southern California'],
+        output: { risk: 'low' },
+      },
+      authorization: {
+        deps: ['lookupA', 'lookupB'],
+        type: 'suspension',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: [{ creditScore: 750 }, { risk: 'low' }],
+      },
+    })
+    expect(input).toEqual([{ creditScore: 750 }, { risk: 'low' }])
+  })
   test('resume scenario', () => {
     const input = getInputData(dag, 'api', {
       api: {
@@ -419,7 +498,7 @@ describe('runTopology', () => {
 })
 
 describe('getResumeSnapshot', () => {
-  test('transform snapshot for resumption', () => {
+  test('transform errored snapshot for resumption', () => {
     const errorSnapshot: Snapshot = {
       status: 'errored',
       started: new Date('2020-01-01T00:00:00Z'),

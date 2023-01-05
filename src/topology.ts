@@ -271,10 +271,10 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
           const { node: selected, reason } = run({ ...baseInput, branch, none })
           events.branched(reason)
           if (selected === NONE) {
-            // Cleanup all dependents
+            // Skip all dependents
             dependents.forEach((node) => eventHandler(node).skipped())
           } else if (typeof selected === 'string') {
-            // Cleanup dependents that were not selected
+            // Skip dependents that were not selected
             _.pull(selected, dependents).forEach((node) =>
               eventHandler(node).skipped()
             )
