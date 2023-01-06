@@ -251,25 +251,10 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
         const events = eventHandler(node)
         // Get the node from the spec
         const { run, type } = spec[node]
-        // Use initial data if node has no dependencies, otherwise, data from
-        // completed nodes
+        // Get the input data from dependencies
         const data = getInputData(dag, node, snapshot.data)
-        // Callback to update state
-        const updateState = events.updateState
-        // Get node state. Will only be present if resuming.
-        const state = snapshot.data[node]?.state
         // Run fn input
-        const baseInput = {
-          data,
-          node,
-          context,
-        }
-        const input = {
-          ...baseInput,
-          updateState,
-          state,
-          signal: abortController.signal,
-        }
+        const baseInput = { data, node, context }
         // Update snapshot
         events.running(data)
         // Get dependent nodes
@@ -298,6 +283,16 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
         }
         // Handle suspension and work node types
         else {
+          // Callback to update state
+          const updateState = events.updateState
+          // Get node state. Will only be present if resuming.
+          const state = snapshot.data[node]?.state
+          const input = {
+            ...baseInput,
+            updateState,
+            state,
+            signal: abortController.signal,
+          }
           const handleSuspension = () => {
             // Set status to completed
             events.completed()
