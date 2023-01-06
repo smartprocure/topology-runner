@@ -94,6 +94,7 @@ export interface NodeData {
   output?: any
   state?: any
   error?: any
+  selected?: string
   reason?: string
 }
 

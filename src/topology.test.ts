@@ -22,11 +22,50 @@ const dag: DAG = {
 
 const branchingDag: DAG = {
   lookup: { deps: [], type: 'work' },
-  branch: { deps: ['lookup'], type: 'branching' },
-  branchA: { deps: ['branch'], type: 'work' },
-  branchB: { deps: ['branch'], type: 'work' },
-  foo: { deps: [], type: 'work' },
-  bar: { deps: ['branchA', 'foo'], type: 'work' },
+  determineIfQualified: { deps: ['lookup'], type: 'branching' },
+  qualified: { deps: ['determineIfQualified'], type: 'work' },
+  notQualified: { deps: ['determineIfQualified'], type: 'work' },
+  removeCandidate: { deps: ['notQualified'], type: 'work' },
+}
+
+const branchingSpec: Spec = {
+  lookup: {
+    deps: [],
+    run: async () => ({
+      yearsOfExperience: 5,
+      currentEmployer: 'GovSpend',
+      email: 'bob@example.com',
+    }),
+  },
+  determineIfQualified: {
+    deps: ['lookup'],
+    type: 'branching',
+    run: ({ data, branch }) =>
+      data[0].yearsOfExperience > 3
+        ? branch('qualified', 'more than 3 years experience')
+        : branch('notQualified'),
+  },
+  qualified: {
+    deps: ['determineIfQualified'],
+    run: async () => {
+      // Simulate sending a thank you email
+      await timers.setTimeout(100)
+    },
+  },
+  notQualified: {
+    deps: ['determineIfQualified'],
+    run: async () => {
+      // Simulate sending a not qualified email
+      await timers.setTimeout(100)
+    },
+  },
+  removeCandidate: {
+    deps: ['notQualified'],
+    run: async () => {
+      // Simulate DB call
+      await timers.setTimeout(100)
+    },
+  },
 }
 
 const suspensionDag: DAG = {
@@ -284,26 +323,42 @@ describe('getInputData', () => {
     ])
   })
   test('handle branching', () => {
-    const input = getInputData(branchingDag, 'branchA', {
+    const input = getInputData(branchingDag, 'qualified', {
       lookup: {
         type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: '123 Main St, Los Angeles, CA',
-        output: 'Southern California',
+        input: 'bob@example.com',
+        output: {
+          yearsOfExperience: 5,
+          currentEmployer: 'GovSpend',
+          email: 'bob@example.com',
+        },
       },
-      branch: {
+      determineIfQualified: {
         type: 'branching',
         deps: ['lookup'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: ['Southern California'],
+        input: [
+          {
+            yearsOfExperience: 5,
+            currentEmployer: 'GovSpend',
+            email: 'bob@example.com',
+          },
+        ],
       },
     })
-    expect(input).toEqual(['Southern California'])
+    expect(input).toEqual([
+      {
+        yearsOfExperience: 5,
+        currentEmployer: 'GovSpend',
+        email: 'bob@example.com',
+      },
+    ])
   })
   test('handle suspension', () => {
     const input = getInputData(suspensionDag, 'email', {
@@ -486,6 +541,64 @@ describe('runTopology', () => {
             { '1': 'file1.jpg', '2': 'file2.jpg', '3': 'file3.jpg' },
           ],
           output: null,
+        },
+      },
+    })
+  })
+  test('branching', async () => {
+    const { start, getSnapshot } = runTopology(branchingSpec, {
+      data: { email: 'bob@example.com' },
+    })
+    await start()
+    expect(getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        lookup: {
+          deps: [],
+          type: 'work',
+          status: 'completed',
+          input: [{ email: 'bob@example.com' }],
+          output: {
+            yearsOfExperience: 5,
+            currentEmployer: 'GovSpend',
+            email: 'bob@example.com',
+          },
+        },
+        determineIfQualified: {
+          deps: ['lookup'],
+          type: 'branching',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 5,
+              currentEmployer: 'GovSpend',
+              email: 'bob@example.com',
+            },
+          ],
+          selected: 'qualified',
+          reason: 'more than 3 years experience',
+        },
+        qualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 5,
+              currentEmployer: 'GovSpend',
+              email: 'bob@example.com',
+            },
+          ],
+        },
+        notQualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+        removeCandidate: {
+          deps: ['notQualified'],
+          type: 'work',
+          status: 'skipped',
         },
       },
     })

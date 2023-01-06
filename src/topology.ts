@@ -126,15 +126,18 @@ const nodeEventHandler =
     }
     const completed = (output?: any) => {
       // Update snapshot
-      snapshot.data[node].output = output
+      if (output !== undefined) {
+        snapshot.data[node].output = output
+      }
       snapshot.data[node].status = 'completed'
       snapshot.data[node].finished = new Date()
       // Emit
       emitter.emit('data', snapshot)
     }
-    const branched = (reason?: string) => {
+    const branched = (selected: string, reason?: string) => {
       // Update snapshot
       snapshot.data[node].status = 'completed'
+      snapshot.data[node].selected = selected
       snapshot.data[node].reason = reason
       snapshot.data[node].finished = new Date()
       // Emit
@@ -208,6 +211,7 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   const promises: ObjectOfPromises = {}
   // Event emitter
   const emitter = new EventEmitter<Events>()
+  const eventHandler = nodeEventHandler(snapshot, emitter)
 
   const start = async () => {
     // Emit initial snapshot
@@ -227,11 +231,22 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
         // Was part of the toplogy suspended?
         const suspended = findKeys({ status: 'suspended' }, snapshot.data)
         // Update snapshot
-        snapshot.status = hasErrors
+        const status = hasErrors
           ? 'errored'
           : suspended.length
           ? 'suspended'
           : 'completed'
+        snapshot.status = status
+        // Get nodes with pending status
+        const pending = findKeys({ status: 'pending' }, snapshot.data)
+        // Suspend pending nodes if topology is suspended
+        if (status === 'suspended') {
+          pending.forEach((node) => eventHandler(node).suspended())
+        }
+        // Skip pending nodes if topology is completed
+        if (status === 'completed') {
+          pending.forEach((node) => eventHandler(node).skipped())
+        }
         snapshot.finished = new Date()
         // Emit
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
@@ -243,7 +258,6 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
         // Exit loop
         return
       }
-      const eventHandler = nodeEventHandler(snapshot, emitter)
 
       // Run nodes that have not been run yet
       for (const node of readyToRunNodes) {
@@ -274,7 +288,7 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
                   eventHandler(node).skipped()
                 )
               }
-              events.branched(reason)
+              events.branched(selected.toString(), reason)
             })
             .catch(events.errored)
             .finally(() => {
