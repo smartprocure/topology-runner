@@ -277,25 +277,32 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
 
         // Handle branching node type
         if (type === 'branching') {
-          const { node: selected, reason } = run({ ...baseInput, branch, none })
-          events.branched(reason)
-          if (selected === NONE) {
-            // Skip all dependents
-            dependents.forEach((node) => eventHandler(node).skipped())
-          } else if (typeof selected === 'string') {
-            // Skip dependents that were not selected
-            _.pull(selected, dependents).forEach((node) =>
-              eventHandler(node).skipped()
-            )
-          }
+          const runFn = async () => run({ ...baseInput, branch, none })
+          promises[node] = runFn()
+            .then(({ node: selected, reason }) => {
+              if (selected === NONE) {
+                // Skip all dependents
+                dependents.forEach((node) => eventHandler(node).skipped())
+              } else if (typeof selected === 'string') {
+                // Skip dependents that were not selected
+                _.pull(selected, dependents).forEach((node) =>
+                  eventHandler(node).skipped()
+                )
+              }
+              events.branched(reason)
+            })
+            .catch(events.errored)
+            .finally(() => {
+              delete promises[node]
+            })
         }
         // Handle suspension and work node types
         else {
           const handleSuspension = () => {
-            // Suspend all dependent nodes
-            dependents.forEach((node) => eventHandler(node).suspended())
             // Set status to completed
             events.completed()
+            // Suspend all dependent nodes
+            dependents.forEach((node) => eventHandler(node).suspended())
           }
           // The run fn may not exist for suspension node type
           const runFn = run || identity
