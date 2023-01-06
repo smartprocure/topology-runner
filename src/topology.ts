@@ -81,12 +81,13 @@ export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
 }
 
 /**
- * Generate an array from the outputs of the node's dependencies.
+ * Get the input data from dependencies.
  */
 export const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
   // Use existing input data from snapshot if it exists
-  if (_.has([node, 'input'], data)) {
-    return _.get([node, 'input'], data)
+  const snapshotInput = _.get([node, 'input'], data)
+  if (snapshotInput) {
+    return snapshotInput
   }
   const deps = dag[node].deps
   const input = []
@@ -98,7 +99,10 @@ export const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
     }
     // Input is the input of the dependency
     else {
-      input.push(..._.get([dep, 'input'], data))
+      const depInput = _.get([dep, 'input'], data)
+      if (depInput) {
+        input.push(...depInput)
+      }
     }
   }
   return input
@@ -138,7 +142,9 @@ const nodeEventHandler =
       // Update snapshot
       snapshot.data[node].status = 'completed'
       snapshot.data[node].selected = selected
-      snapshot.data[node].reason = reason
+      if (reason) {
+        snapshot.data[node].reason = reason
+      }
       snapshot.data[node].finished = new Date()
       // Emit
       emitter.emit('data', snapshot)
@@ -279,6 +285,7 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
           const runFn = async () => run({ ...baseInput, branch, none })
           promises[node] = runFn()
             .then(({ node: selected, reason }) => {
+              events.branched(selected.toString(), reason)
               if (selected === NONE) {
                 // Skip all dependents
                 dependents.forEach((node) => eventHandler(node).skipped())
@@ -288,7 +295,6 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
                   eventHandler(node).skipped()
                 )
               }
-              events.branched(selected.toString(), reason)
             })
             .catch(events.errored)
             .finally(() => {

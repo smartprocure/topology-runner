@@ -29,21 +29,41 @@ const branchingDag: DAG = {
 }
 
 const branchingSpec: Spec = {
+  // Simulate DB lookup by email
   lookup: {
     deps: [],
-    run: async () => ({
-      yearsOfExperience: 5,
-      currentEmployer: 'GovSpend',
-      email: 'bob@example.com',
-    }),
+    run: async ({ data }) => {
+      const email = data[0]?.email
+      if (email === 'bob@example.com') {
+        return {
+          yearsOfExperience: 5,
+          currentEmployer: 'GovSpend',
+          email: 'bob@example.com',
+        }
+      }
+      if (email === 'tom@example.com') {
+        return {
+          yearsOfExperience: 3,
+          currentEmployer: 'Microsoft',
+          email: 'tom@example.com',
+        }
+      }
+    },
   },
+  // Branch based on output from previous node
   determineIfQualified: {
     deps: ['lookup'],
     type: 'branching',
-    run: ({ data, branch }) =>
-      data[0].yearsOfExperience > 3
-        ? branch('qualified', 'more than 3 years experience')
-        : branch('notQualified'),
+    run: ({ data, branch, none }) => {
+      const { email, yearsOfExperience } = data[0] || {}
+      if (email) {
+        if (yearsOfExperience > 3) {
+          return branch('qualified', 'more than 3 years experience')
+        }
+        return branch('notQualified')
+      }
+      return none('email not found')
+    },
   },
   qualified: {
     deps: ['determineIfQualified'],
@@ -155,10 +175,12 @@ describe('getNodesReadyToRun', () => {
         deps: [],
         status: 'pending',
         started: new Date('2022-01-01T12:00:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
       },
     })
     expect(nodes).toEqual(['api'])
@@ -171,10 +193,12 @@ describe('getNodesReadyToRun', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
     })
@@ -188,10 +212,12 @@ describe('getNodesReadyToRun', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
@@ -212,10 +238,12 @@ describe('getNodesReadyToRun', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
@@ -236,10 +264,12 @@ describe('getNodesReadyToRun', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
@@ -275,10 +305,12 @@ describe('getInputData', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
     })
@@ -292,10 +324,12 @@ describe('getInputData', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
@@ -330,7 +364,7 @@ describe('getInputData', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: 'bob@example.com',
+        input: ['bob@example.com'],
         output: {
           yearsOfExperience: 5,
           currentEmployer: 'GovSpend',
@@ -368,7 +402,7 @@ describe('getInputData', () => {
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: '123 Main St, Los Angeles, CA',
+        input: ['123 Main St, Los Angeles, CA'],
         output: 'Southern California',
       },
       lookupA: {
@@ -406,17 +440,21 @@ describe('getInputData', () => {
         type: 'work',
         deps: [],
         status: 'pending',
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         state: '2020-04-01',
       },
     })
-    expect(input).toEqual({
-      startDate: '2020-01-01',
-      endDate: '2020-12-31',
-    })
+    expect(input).toEqual([
+      {
+        startDate: '2020-01-01',
+        endDate: '2020-12-31',
+      },
+    ])
   })
 })
 
@@ -589,6 +627,104 @@ describe('runTopology', () => {
               email: 'bob@example.com',
             },
           ],
+        },
+        notQualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+        removeCandidate: {
+          deps: ['notQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+      },
+    })
+  })
+  test('branching 2', async () => {
+    const { start, getSnapshot } = runTopology(branchingSpec, {
+      data: { email: 'tom@example.com' },
+    })
+    await start()
+    expect(getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        lookup: {
+          deps: [],
+          type: 'work',
+          status: 'completed',
+          input: [{ email: 'tom@example.com' }],
+          output: {
+            yearsOfExperience: 3,
+            currentEmployer: 'Microsoft',
+            email: 'tom@example.com',
+          },
+        },
+        determineIfQualified: {
+          deps: ['lookup'],
+          type: 'branching',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 3,
+              currentEmployer: 'Microsoft',
+              email: 'tom@example.com',
+            },
+          ],
+          selected: 'notQualified',
+        },
+        qualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+        notQualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 3,
+              currentEmployer: 'Microsoft',
+              email: 'tom@example.com',
+            },
+          ],
+        },
+        removeCandidate: {
+          deps: ['notQualified'],
+          type: 'work',
+          status: 'completed',
+          input: [undefined],
+        },
+      },
+    })
+  })
+  test('branching none', async () => {
+    const { start, getSnapshot } = runTopology(branchingSpec, {
+      data: { email: 'joe@example.com' },
+    })
+    await start()
+    expect(getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        lookup: {
+          deps: [],
+          type: 'work',
+          status: 'completed',
+          input: [{ email: 'joe@example.com' }],
+        },
+        determineIfQualified: {
+          deps: ['lookup'],
+          type: 'branching',
+          status: 'completed',
+          input: [undefined],
+          selected: 'Symbol(NONE)',
+          reason: 'email not found',
+        },
+        qualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
         },
         notQualified: {
           deps: ['determineIfQualified'],

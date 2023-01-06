@@ -4,7 +4,7 @@ type UpdateState = (state: any) => void
 export type Initialized = Record<string, any>
 
 export interface BaseInput {
-  data: any
+  data: any[]
   node: string
   context?: any
 }
@@ -90,7 +90,7 @@ export interface NodeData {
   status: NodeStatus
   started?: Date
   finished?: Date
-  input?: any
+  input?: any[]
   output?: any
   state?: any
   error?: any
