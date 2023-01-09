@@ -404,8 +404,10 @@ const branchingSpec: Spec = {
 Sometimes you need to suspend a topology and wait for an event or an extended
 period of time to elapse. A node with `type` set to `suspension` can be used in
 these scenarios. The `run` function is asynchronous so you can make a database call
-or whatever. All dependent nodes of the `suspension` node will be suspended after
-it completes.
+or whatever. All dependent nodes of the `suspension` node will have a status of `suspended`
+after it completes.
+
+When resumption of a topology occurs the dependents of the suspended node will be executed.
 
 In the example below there is a human authorization step that must take place before
 the topology can complete. This could be the result of an HTML form input that triggers
