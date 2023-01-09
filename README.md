@@ -228,16 +228,113 @@ A successful run of the above will produce a snapshot that looks like this:
 }
 ```
 
+### Running a subset of a DAG
+
+Sometimes you might want to skip one or more nodes in a DAG.
+Say, for example, the first node downloads a file and the second
+node processes that file. You may want to reprocess the file without
+downloading it again. To do that you can use either the `includeNodes` or
+`excludeNodes` option with some input `data`.
+
+The computed DAG after either including or excluding nodes will be outputted
+with the snapshot, making it easy to resume that topology.
+
+```typescript
+// Using includeNodes
+runTopology(spec, { includeNodes: ['processFile'], data: ['123', '456'] })
+// Using excludeNodes
+runTopology(spec, { excludeNodes: ['downloadFile'], data: ['123', '456'] })
+```
+
+## resumeTopology
+
+```typescript
+resumeTopology(spec: Spec, snapshot: Snapshot) => Response
+```
+
+Allows you to resume a topology from a previously emitted snapshot.
+Each node should maintain its state via the `updateState` callback.
+
+```typescript
+import { resumeTopology } from 'topology-runner'
+
+const { start, emitter } = resumeTopology(spec, snapshot)
+await start()
+```
+
+Below is an example snapshot where an error occurred. The DAG
+can be rerun, resuming where a node did not complete. In this example,
+`api` and `details` will NOT be rerun, but `attachments` would. See tests
+for a resume node design pattern.
+
+```json
+{
+  "status": "errored",
+  "started": "2022-05-20T14:47:47.372Z",
+  "dag": {
+    "api": { "deps": [] },
+    "details": { "deps": ["api"] },
+    "attachments": { "deps": ["api"] },
+    "writeToDB": { "deps": ["details", "attachments"] }
+  },
+  "data": {
+    "api": {
+      "started": "2022-05-20T14:47:47.373Z",
+      "input": [],
+      "status": "completed",
+      "output": [1, 2, 3],
+      "finished": "2022-05-20T14:47:47.373Z"
+    },
+    "details": {
+      "started": "2022-05-20T14:47:47.373Z",
+      "input": [[1, 2, 3]],
+      "status": "completed",
+      "output": {
+        "1": "description 1",
+        "2": "description 2",
+        "3": "description 3"
+      },
+      "finished": "2022-05-20T14:47:47.373Z"
+    },
+    "attachments": {
+      "started": "2022-05-20T14:47:47.373Z",
+      "input": [[1, 2, 3]],
+      "status": "errored",
+      "state": {
+        "index": 0,
+        "output": {
+          "1": "file1.jpg",
+          "2": "file2.jpg"
+        }
+      },
+      "finished": "2022-05-20T14:47:47.374Z"
+    }
+  },
+  "error": "Failed processing id: 2",
+  "finished": "2022-05-20T14:47:47.374Z"
+}
+```
+
+## Node Types
+
+There are three node types: work, branching, and suspension.
+
+### Work
+
+Work node types are the default node type. You can specify them with `type` set to
+`work` or leave that off and it will be assumed. The examples above only contain `work`
+nodes.
+
 ### Branching
 
 A node with `type` set to `branching` allows for branching logic where the node
-must return a dependent branch name using the `branch` fn or call `none()` explicitly.
+must return a dependent branch name using the `branch` fn or return `none()` explicitly.
 An optional reason can be set and will be stamped on the snapshot. If a branch name
 is returned that is invalid an error will be thrown.
 
-In the example spec below running the topology with `{ email: 'bob@example.com' }` will
-result in the `qualified` node being run and the `notQualified` and `removeCandidate`
-nodes being skipped.
+In the example spec below running the topology with initial data set to `{ email: 'bob@example.com' }`
+will result in the `qualified` node being run and the `notQualified` and `removeCandidate`
+nodes being skipped. The last parameter for `branch` and `none` is the optional reason.
 
 ```typescript
 const branchingSpec: Spec = {
@@ -340,92 +437,5 @@ const suspensionSpec: Spec = {
       success: true,
     }),
   },
-}
-```
-
-### Running a subset of a DAG
-
-Sometimes you might want to skip one or more nodes in a DAG.
-Say, for example, the first node downloads a file and the second
-node processes that file. You may want to reprocess the file without
-downloading it again. To do that you can use either the `includeNodes` or
-`excludeNodes` option with some input `data`.
-
-The computed DAG after either including or excluding nodes will be outputted
-with the snapshot, making it easy to resume that topology.
-
-```typescript
-// Using includeNodes
-runTopology(spec, { includeNodes: ['processFile'], data: ['123', '456'] })
-// Using excludeNodes
-runTopology(spec, { excludeNodes: ['downloadFile'], data: ['123', '456'] })
-```
-
-## resumeTopology
-
-```typescript
-resumeTopology(spec: Spec, snapshot: Snapshot) => Response
-```
-
-Allows you to resume a topology from a previously emitted snapshot.
-Each node should maintain its state via the `updateState` callback.
-
-```typescript
-import { resumeTopology } from 'topology-runner'
-
-const { start, emitter } = resumeTopology(spec, snapshot)
-await start()
-```
-
-Below is an example snapshot where an error occurred. The DAG
-can be rerun, resuming where a node did not complete. In this example,
-`api` and `details` will NOT be rerun, but `attachments` would. See tests
-for a resume node design pattern.
-
-```json
-{
-  "status": "errored",
-  "started": "2022-05-20T14:47:47.372Z",
-  "dag": {
-    "api": { "deps": [] },
-    "details": { "deps": ["api"] },
-    "attachments": { "deps": ["api"] },
-    "writeToDB": { "deps": ["details", "attachments"] }
-  },
-  "data": {
-    "api": {
-      "started": "2022-05-20T14:47:47.373Z",
-      "input": [],
-      "status": "completed",
-      "output": [1, 2, 3],
-      "finished": "2022-05-20T14:47:47.373Z"
-    },
-    "details": {
-      "started": "2022-05-20T14:47:47.373Z",
-      "input": [[1, 2, 3]],
-      "status": "completed",
-      "output": {
-        "1": "description 1",
-        "2": "description 2",
-        "3": "description 3"
-      },
-      "finished": "2022-05-20T14:47:47.373Z"
-    },
-    "attachments": {
-      "started": "2022-05-20T14:47:47.373Z",
-      "input": [[1, 2, 3]],
-      "status": "errored",
-      "state": {
-        "index": 0,
-        "output": {
-          "1": "file1.jpg",
-          "2": "file2.jpg"
-        }
-      },
-      "finished": "2022-05-20T14:47:47.374Z"
-    }
-  },
-  "error": "Failed processing id: 2",
-  "finished": "2022-05-20T14:47:47.374Z"
 }
 ```
