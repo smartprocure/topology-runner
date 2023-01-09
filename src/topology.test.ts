@@ -739,6 +739,38 @@ describe('runTopology', () => {
       },
     })
   })
+  test('branching error', async () => {
+    const spec: Spec = {
+      branch: {
+        deps: [],
+        type: 'branching',
+        run: ({ branch }) => {
+          return branch('foo')
+        },
+      },
+      bar: {
+        deps: ['branch'],
+        run: async () => 1,
+      },
+      baz: {
+        deps: ['branch'],
+        run: async () => 2,
+      },
+    }
+    const { start, getSnapshot } = runTopology(spec)
+    await expect(start()).rejects.toThrow('Errored nodes: ["branch"]')
+    // Node errored
+    expect(getSnapshot()).toMatchObject({
+      status: 'errored',
+      data: {
+        branch: {
+          input: [],
+          status: 'errored',
+          error: { stack: expect.stringContaining('Branch not found: foo') },
+        },
+      },
+    })
+  })
   test('suspend and resume', async () => {
     const { start, getSnapshot } = runTopology(suspensionSpec)
     await start()

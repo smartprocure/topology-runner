@@ -48,6 +48,9 @@ export const filterDAG = (dag: DAG, options: Options = {}): DAG => {
   return dag
 }
 
+/**
+ * Get the dependents of the node.
+ */
 const getDependents = (node: string, dag: DAG) => {
   const nodes: string[] = []
   for (const key in dag) {
@@ -203,7 +206,7 @@ const none = (reason?: string) => ({
 })
 
 // eslint-disable-next-line
-const identity = async () => {}
+const noOp = async () => {}
 
 const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   const missingSpecNodes = getMissingSpecNodes(spec, dag)
@@ -286,10 +289,15 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
           promises[node] = runFn()
             .then(({ node: selected, reason }) => {
               events.branched(selected.toString(), reason)
+              // Explicitly skip all dependents
               if (selected === NONE) {
                 // Skip all dependents
                 dependents.forEach((node) => eventHandler(node).skipped())
               } else if (typeof selected === 'string') {
+                // Check if selected branch is a dependent of the node
+                if (!dependents.includes(selected)) {
+                  throw new TopologyError(`Branch not found: ${selected}`)
+                }
                 // Skip dependents that were not selected
                 _.pull(selected, dependents).forEach((node) =>
                   eventHandler(node).skipped()
@@ -320,7 +328,7 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
             dependents.forEach((node) => eventHandler(node).suspended())
           }
           // The run fn may not exist for suspension node type
-          const runFn = run || identity
+          const runFn = run || noOp
           promises[node] = runFn(input)
             .then(type === 'suspension' ? handleSuspension : events.completed)
             .catch(events.errored)
@@ -372,6 +380,7 @@ const extractDag = (
 
   for (const node in obj) {
     const nodeDef = obj[node]
+    // Default node type to work if not set
     dag[node] = { deps: nodeDef.deps, type: nodeDef.type || 'work' }
   }
 
