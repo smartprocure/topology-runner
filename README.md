@@ -15,7 +15,7 @@ type Response = {
 
 Run a topology consisting of a DAG (directed acyclic graph).
 
-Nodes have a `run` fn that takes an object with the following shape:
+Work nodes have a `run` fn that takes an object with the following shape:
 
 ```typescript
 interface RunInput {
@@ -33,11 +33,11 @@ when a node's dependencies are met it will be run. Data does does not flow incre
 A node must complete in entirety before a node that depends on it will run.
 
 If a node throws an error it will be caught and no further processing on that
-node will be done. Parallel nodes will continue to run until they either complete
+node or it's dependencies will be done. Parallel nodes will continue to run until they either complete
 or throw an error.
 
-An event emitter emits a new "data" snapshot every time a node starts, completes, errors, or
-updates its state. Use `getSnapshot` to get the final snapshot, regardless of whether the
+An event emitter emits a new "data" snapshot every time a node is started, completed, skipped, suspended,
+errors, or updates its state. Use `getSnapshot` to get the final snapshot, regardless of whether the
 topology fails or succeeds. An "error" or "done" event will be emitted when the DAG either
 fails to complete or sucessfully completes. Note that the outputted snapshot is mutated internally for
 efficiency and should not be modified.
@@ -312,5 +312,132 @@ for a resume node design pattern.
   },
   "error": "Failed processing id: 2",
   "finished": "2022-05-20T14:47:47.374Z"
+}
+```
+
+## Node Types
+
+There are three node types: work, branching, and suspension.
+
+### Work
+
+Work node types are the default node type. You can specify them with `type` set to
+`work` or leave that off and it will be assumed. The examples above only contain `work`
+nodes.
+
+### Branching
+
+A node with `type` set to `branching` allows for branching logic where the node
+must return a dependent branch name using the `branch` fn or return `none()` explicitly.
+An optional reason can be set and will be stamped on the snapshot. If a branch name
+is returned that is invalid an error will be thrown.
+
+In the example spec below running the topology with initial data set to `{ email: 'bob@example.com' }`
+will result in the `qualified` node being run and the `notQualified` and `removeCandidate`
+nodes being skipped. The last parameter for `branch` and `none` is the optional reason.
+
+```typescript
+const branchingSpec: Spec = {
+  // Simulate DB lookup by email
+  lookup: {
+    deps: [],
+    run: async ({ data }) => {
+      const email = data[0]?.email
+      if (email === 'bob@example.com') {
+        return {
+          yearsOfExperience: 5,
+          currentEmployer: 'GovSpend',
+          email: 'bob@example.com',
+        }
+      }
+      if (email === 'tom@example.com') {
+        return {
+          yearsOfExperience: 3,
+          currentEmployer: 'Microsoft',
+          email: 'tom@example.com',
+        }
+      }
+    },
+  },
+  // Branch based on output from previous node
+  determineIfQualified: {
+    deps: ['lookup'],
+    type: 'branching',
+    run: ({ data, branch, none }) => {
+      const { email, yearsOfExperience } = data[0] || {}
+      if (email) {
+        if (yearsOfExperience > 3) {
+          return branch('qualified', 'more than 3 years experience')
+        }
+        return branch('notQualified')
+      }
+      return none('email not found')
+    },
+  },
+  qualified: {
+    deps: ['determineIfQualified'],
+    run: async () => {
+      // Simulate sending a thank you email
+      await timers.setTimeout(100)
+    },
+  },
+  notQualified: {
+    deps: ['determineIfQualified'],
+    run: async () => {
+      // Simulate sending a not qualified email
+      await timers.setTimeout(100)
+    },
+  },
+  removeCandidate: {
+    deps: ['notQualified'],
+    run: async () => {
+      // Simulate DB call
+      await timers.setTimeout(100)
+    },
+  },
+}
+
+```
+
+### Suspension
+
+Sometimes you need to suspend a topology and wait for an event or an extended
+period of time to elapse. A node with `type` set to `suspension` can be used in
+these scenarios. The `run` function is asynchronous so you can make a database call
+or whatever. All dependent nodes of the `suspension` node will have a status of `suspended`
+after it completes.
+
+When resumption of a topology occurs the dependents of the suspended node will be executed.
+
+In the example below there is a human authorization step that must take place before
+the topology can complete. This could be the result of an HTML form input that triggers
+a backend call to execute `resumeTopology(suspensionSpec, snapshot)`.
+
+```typescript
+const suspensionSpec: Spec = {
+  input: { deps: [], type: 'work', run: async () => 'Southern California' },
+  lookupA: {
+    deps: ['input'],
+    type: 'work',
+    run: async () => ({
+      creditScore: 750,
+    }),
+  },
+  lookupB: {
+    deps: ['input'],
+    type: 'work',
+    run: async () => ({ risk: 'low' }),
+  },
+  authorization: {
+    deps: ['lookupA', 'lookupB'],
+    type: 'suspension',
+  },
+  email: {
+    deps: ['authorization'],
+    type: 'work',
+    run: async () => ({
+      success: true,
+    }),
+  },
 }
 ```

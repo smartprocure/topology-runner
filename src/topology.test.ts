@@ -14,10 +14,113 @@ import { DAG, RunFn, Snapshot, Spec } from './types'
 import timers from 'timers/promises'
 
 const dag: DAG = {
-  api: { deps: [] },
-  details: { deps: ['api'] },
-  attachments: { deps: ['api'] },
-  writeToDB: { deps: ['details', 'attachments'] },
+  api: { deps: [], type: 'work' },
+  details: { deps: ['api'], type: 'work' },
+  attachments: { deps: ['api'], type: 'work' },
+  writeToDB: { deps: ['details', 'attachments'], type: 'work' },
+}
+
+const branchingDag: DAG = {
+  lookup: { deps: [], type: 'work' },
+  determineIfQualified: { deps: ['lookup'], type: 'branching' },
+  qualified: { deps: ['determineIfQualified'], type: 'work' },
+  notQualified: { deps: ['determineIfQualified'], type: 'work' },
+  removeCandidate: { deps: ['notQualified'], type: 'work' },
+}
+
+const branchingSpec: Spec = {
+  // Simulate DB lookup by email
+  lookup: {
+    deps: [],
+    run: async ({ data }) => {
+      const email = data[0]?.email
+      if (email === 'bob@example.com') {
+        return {
+          yearsOfExperience: 5,
+          currentEmployer: 'GovSpend',
+          email: 'bob@example.com',
+        }
+      }
+      if (email === 'tom@example.com') {
+        return {
+          yearsOfExperience: 3,
+          currentEmployer: 'Microsoft',
+          email: 'tom@example.com',
+        }
+      }
+    },
+  },
+  // Branch based on output from previous node
+  determineIfQualified: {
+    deps: ['lookup'],
+    type: 'branching',
+    run: ({ data, branch, none }) => {
+      const { email, yearsOfExperience } = data[0] || {}
+      if (email) {
+        if (yearsOfExperience > 3) {
+          return branch('qualified', 'more than 3 years experience')
+        }
+        return branch('notQualified')
+      }
+      return none('email not found')
+    },
+  },
+  qualified: {
+    deps: ['determineIfQualified'],
+    run: async () => {
+      // Simulate sending a thank you email
+      await timers.setTimeout(100)
+    },
+  },
+  notQualified: {
+    deps: ['determineIfQualified'],
+    run: async () => {
+      // Simulate sending a not qualified email
+      await timers.setTimeout(100)
+    },
+  },
+  removeCandidate: {
+    deps: ['notQualified'],
+    run: async () => {
+      // Simulate DB call
+      await timers.setTimeout(100)
+    },
+  },
+}
+
+const suspensionDag: DAG = {
+  input: { deps: [], type: 'work' },
+  lookupA: { deps: ['input'], type: 'work' },
+  lookupB: { deps: ['input'], type: 'work' },
+  authorization: { deps: ['lookupA', 'lookupB'], type: 'suspension' },
+  email: { deps: ['authorization'], type: 'work' },
+}
+
+const suspensionSpec: Spec = {
+  input: { deps: [], type: 'work', run: async () => 'Southern California' },
+  lookupA: {
+    deps: ['input'],
+    type: 'work',
+    run: async () => ({
+      creditScore: 750,
+    }),
+  },
+  lookupB: {
+    deps: ['input'],
+    type: 'work',
+    run: async () => ({ risk: 'low' }),
+  },
+  authorization: {
+    deps: ['lookupA', 'lookupB'],
+    type: 'suspension',
+  },
+  email: {
+    deps: ['authorization'],
+    type: 'work',
+    run: async () => ({
+      success: true,
+    }),
+  },
 }
 
 const spec: Spec = {
@@ -48,15 +151,15 @@ const spec: Spec = {
 describe('filterDAG', () => {
   test('exclude nodes', () => {
     expect(filterDAG(dag, { excludeNodes: ['api'] })).toEqual({
-      details: { deps: [] },
-      attachments: { deps: [] },
-      writeToDB: { deps: ['details', 'attachments'] },
+      details: { deps: [], type: 'work' },
+      attachments: { deps: [], type: 'work' },
+      writeToDB: { deps: ['details', 'attachments'], type: 'work' },
     })
   })
   test('include nodes', () => {
     expect(filterDAG(dag, { includeNodes: ['details', 'writeToDB'] })).toEqual({
-      details: { deps: [] },
-      writeToDB: { deps: ['details'] },
+      details: { deps: [], type: 'work' },
+      writeToDB: { deps: ['details'], type: 'work' },
     })
   })
   test('no options', () => {
@@ -65,22 +168,19 @@ describe('filterDAG', () => {
 })
 
 describe('getNodesReadyToRun', () => {
-  const dag = {
-    api: { deps: [] },
-    details: { deps: ['api'] },
-    attachments: { deps: ['api'] },
-    writeToDB: { deps: ['details', 'attachments'] },
-  }
   test('resume - pending', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'pending',
         started: new Date('2022-01-01T12:00:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
       },
     })
     expect(nodes).toEqual(['api'])
@@ -88,14 +188,17 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
     })
@@ -104,17 +207,21 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed and running', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'running',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -126,17 +233,21 @@ describe('getNodesReadyToRun', () => {
   test('deps met - exclude completed and errored', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'errored',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -148,17 +259,21 @@ describe('getNodesReadyToRun', () => {
   test('deps not met', () => {
     const nodes = getNodesReadyToRun(dag, {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -166,6 +281,7 @@ describe('getNodesReadyToRun', () => {
         output: { '123': 'foo', '456': 'bar' },
       },
       attachments: {
+        type: 'work',
         deps: ['api'],
         status: 'errored',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -184,14 +300,17 @@ describe('getInputData', () => {
   test('single dep', () => {
     const input = getInputData(dag, 'details', {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
     })
@@ -200,17 +319,21 @@ describe('getInputData', () => {
   test('multiple deps', () => {
     const input = getInputData(dag, 'writeToDB', {
       api: {
+        type: 'work',
         deps: [],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
         finished: new Date('2022-01-01T12:05:00Z'),
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         output: ['123', '456'],
       },
       details: {
+        type: 'work',
         deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -219,6 +342,7 @@ describe('getInputData', () => {
         output: { 123: { description: 'foo' } },
       },
       attachments: {
+        type: 'work',
         deps: ['api'],
         status: 'completed',
         started: new Date('2022-01-01T12:00:00Z'),
@@ -232,40 +356,131 @@ describe('getInputData', () => {
       { 123: { file: 'foo.jpg' } },
     ])
   })
+  test('handle branching', () => {
+    const input = getInputData(branchingDag, 'qualified', {
+      lookup: {
+        type: 'work',
+        deps: [],
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: ['bob@example.com'],
+        output: {
+          yearsOfExperience: 5,
+          currentEmployer: 'GovSpend',
+          email: 'bob@example.com',
+        },
+      },
+      determineIfQualified: {
+        type: 'branching',
+        deps: ['lookup'],
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: [
+          {
+            yearsOfExperience: 5,
+            currentEmployer: 'GovSpend',
+            email: 'bob@example.com',
+          },
+        ],
+      },
+    })
+    expect(input).toEqual([
+      {
+        yearsOfExperience: 5,
+        currentEmployer: 'GovSpend',
+        email: 'bob@example.com',
+      },
+    ])
+  })
+  test('handle suspension', () => {
+    const input = getInputData(suspensionDag, 'email', {
+      input: {
+        deps: [],
+        type: 'work',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: ['123 Main St, Los Angeles, CA'],
+        output: 'Southern California',
+      },
+      lookupA: {
+        deps: ['input'],
+        type: 'work',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: ['Southern California'],
+        output: { creditScore: 750 },
+      },
+      lookupB: {
+        deps: ['input'],
+        type: 'work',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: ['Southern California'],
+        output: { risk: 'low' },
+      },
+      authorization: {
+        deps: ['lookupA', 'lookupB'],
+        type: 'suspension',
+        status: 'completed',
+        started: new Date('2022-01-01T12:00:00Z'),
+        finished: new Date('2022-01-01T12:05:00Z'),
+        input: [{ creditScore: 750 }, { risk: 'low' }],
+      },
+    })
+    expect(input).toEqual([{ creditScore: 750 }, { risk: 'low' }])
+  })
   test('resume scenario', () => {
     const input = getInputData(dag, 'api', {
       api: {
+        type: 'work',
         deps: [],
         status: 'pending',
-        input: {
-          startDate: '2020-01-01',
-          endDate: '2020-12-31',
-        },
+        input: [
+          {
+            startDate: '2020-01-01',
+            endDate: '2020-12-31',
+          },
+        ],
         state: '2020-04-01',
       },
     })
-    expect(input).toEqual({
-      startDate: '2020-01-01',
-      endDate: '2020-12-31',
-    })
+    expect(input).toEqual([
+      {
+        startDate: '2020-01-01',
+        endDate: '2020-12-31',
+      },
+    ])
   })
 })
 
 describe('initData', () => {
   test('data passed', () => {
     expect(initSnapshotData(dag, [1, 2, 3])).toEqual({
-      api: { deps: [], status: 'pending', input: [[1, 2, 3]] },
-      details: { deps: ['api'], status: 'pending' },
-      attachments: { deps: ['api'], status: 'pending' },
-      writeToDB: { deps: ['details', 'attachments'], status: 'pending' },
+      api: { deps: [], status: 'pending', input: [[1, 2, 3]], type: 'work' },
+      details: { deps: ['api'], status: 'pending', type: 'work' },
+      attachments: { deps: ['api'], status: 'pending', type: 'work' },
+      writeToDB: {
+        deps: ['details', 'attachments'],
+        status: 'pending',
+        type: 'work',
+      },
     })
   })
   test('data empty', () => {
     expect(initSnapshotData(dag)).toEqual({
-      api: { deps: [], status: 'pending' },
-      details: { deps: ['api'], status: 'pending' },
-      attachments: { deps: ['api'], status: 'pending' },
-      writeToDB: { deps: ['details', 'attachments'], status: 'pending' },
+      api: { deps: [], status: 'pending', type: 'work' },
+      details: { deps: ['api'], status: 'pending', type: 'work' },
+      attachments: { deps: ['api'], status: 'pending', type: 'work' },
+      writeToDB: {
+        deps: ['details', 'attachments'],
+        status: 'pending',
+        type: 'work',
+      },
     })
   })
 })
@@ -325,7 +540,7 @@ describe('runTopology', () => {
     })
   })
   test('completed', async () => {
-    const { start, getSnapshot } = runTopology(spec, dag)
+    const { start, getSnapshot } = runTopology(spec)
     await start()
     expect(getSnapshot()).toMatchObject({
       status: 'completed',
@@ -368,6 +583,244 @@ describe('runTopology', () => {
       },
     })
   })
+  test('branching', async () => {
+    const { start, getSnapshot } = runTopology(branchingSpec, {
+      data: { email: 'bob@example.com' },
+    })
+    await start()
+    expect(getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        lookup: {
+          deps: [],
+          type: 'work',
+          status: 'completed',
+          input: [{ email: 'bob@example.com' }],
+          output: {
+            yearsOfExperience: 5,
+            currentEmployer: 'GovSpend',
+            email: 'bob@example.com',
+          },
+        },
+        determineIfQualified: {
+          deps: ['lookup'],
+          type: 'branching',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 5,
+              currentEmployer: 'GovSpend',
+              email: 'bob@example.com',
+            },
+          ],
+          selected: 'qualified',
+          reason: 'more than 3 years experience',
+        },
+        qualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 5,
+              currentEmployer: 'GovSpend',
+              email: 'bob@example.com',
+            },
+          ],
+        },
+        notQualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+        removeCandidate: {
+          deps: ['notQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+      },
+    })
+  })
+  test('branching 2', async () => {
+    const { start, getSnapshot } = runTopology(branchingSpec, {
+      data: { email: 'tom@example.com' },
+    })
+    await start()
+    expect(getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        lookup: {
+          deps: [],
+          type: 'work',
+          status: 'completed',
+          input: [{ email: 'tom@example.com' }],
+          output: {
+            yearsOfExperience: 3,
+            currentEmployer: 'Microsoft',
+            email: 'tom@example.com',
+          },
+        },
+        determineIfQualified: {
+          deps: ['lookup'],
+          type: 'branching',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 3,
+              currentEmployer: 'Microsoft',
+              email: 'tom@example.com',
+            },
+          ],
+          selected: 'notQualified',
+        },
+        qualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+        notQualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'completed',
+          input: [
+            {
+              yearsOfExperience: 3,
+              currentEmployer: 'Microsoft',
+              email: 'tom@example.com',
+            },
+          ],
+        },
+        removeCandidate: {
+          deps: ['notQualified'],
+          type: 'work',
+          status: 'completed',
+          input: [undefined],
+        },
+      },
+    })
+  })
+  test('branching none', async () => {
+    const { start, getSnapshot } = runTopology(branchingSpec, {
+      data: { email: 'joe@example.com' },
+    })
+    await start()
+    expect(getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        lookup: {
+          deps: [],
+          type: 'work',
+          status: 'completed',
+          input: [{ email: 'joe@example.com' }],
+        },
+        determineIfQualified: {
+          deps: ['lookup'],
+          type: 'branching',
+          status: 'completed',
+          input: [undefined],
+          selected: 'Symbol(NONE)',
+          reason: 'email not found',
+        },
+        qualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+        notQualified: {
+          deps: ['determineIfQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+        removeCandidate: {
+          deps: ['notQualified'],
+          type: 'work',
+          status: 'skipped',
+        },
+      },
+    })
+  })
+  test('branching error', async () => {
+    const spec: Spec = {
+      branch: {
+        deps: [],
+        type: 'branching',
+        run: ({ branch }) => {
+          return branch('foo')
+        },
+      },
+      bar: {
+        deps: ['branch'],
+        run: async () => 1,
+      },
+      baz: {
+        deps: ['branch'],
+        run: async () => 2,
+      },
+    }
+    const { start, getSnapshot } = runTopology(spec)
+    await expect(start()).rejects.toThrow('Errored nodes: ["branch"]')
+    // Node errored
+    expect(getSnapshot()).toMatchObject({
+      status: 'errored',
+      data: {
+        branch: {
+          input: [],
+          status: 'errored',
+          error: { stack: expect.stringContaining('Branch not found: foo') },
+        },
+      },
+    })
+  })
+  test('suspend and resume', async () => {
+    const { start, getSnapshot } = runTopology(suspensionSpec)
+    await start()
+    const snapshot = getSnapshot()
+    expect(snapshot).toMatchObject({
+      status: 'suspended',
+      data: {
+        input: { deps: [], type: 'work', status: 'completed' },
+        lookupA: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        lookupB: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        authorization: {
+          deps: ['lookupA', 'lookupB'],
+          type: 'suspension',
+          status: 'completed',
+        },
+      },
+    })
+    const resume = resumeTopology(suspensionSpec, snapshot)
+    await resume.start()
+    expect(resume.getSnapshot()).toMatchObject({
+      status: 'completed',
+      data: {
+        input: { deps: [], type: 'work', status: 'completed' },
+        lookupA: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        lookupB: {
+          deps: ['input'],
+          type: 'work',
+          status: 'completed',
+        },
+        authorization: {
+          deps: ['lookupA', 'lookupB'],
+          type: 'suspension',
+          status: 'completed',
+        },
+        email: { deps: ['authorization'], type: 'work', status: 'completed' },
+      },
+    })
+  })
   test('gracefully shutdown when stop is called', async () => {
     const spec: Spec = {
       api: {
@@ -384,7 +837,7 @@ describe('runTopology', () => {
       },
     }
 
-    const { start, stop, getSnapshot } = runTopology(spec, dag)
+    const { start, stop, getSnapshot } = runTopology(spec)
     setTimeout(stop, 200)
     await expect(start()).rejects.toThrow('Errored nodes: ["api"]')
     // Node errored
@@ -403,13 +856,14 @@ describe('runTopology', () => {
 })
 
 describe('getResumeSnapshot', () => {
-  test('transform snapshot for resumption', () => {
+  test('transform errored snapshot for resumption', () => {
     const errorSnapshot: Snapshot = {
       status: 'errored',
       started: new Date('2020-01-01T00:00:00Z'),
       finished: new Date('2020-01-01T00:00:01Z'),
       data: {
         api: {
+          type: 'work',
           deps: [],
           started: new Date('2020-01-01T00:00:00Z'),
           finished: new Date('2020-01-01T00:00:01Z'),
@@ -418,6 +872,7 @@ describe('getResumeSnapshot', () => {
           output: [1, 2, 3],
         },
         details: {
+          type: 'work',
           deps: ['api'],
           started: new Date('2020-01-01T00:00:00Z'),
           finished: new Date('2020-01-01T00:00:01Z'),
@@ -430,6 +885,7 @@ describe('getResumeSnapshot', () => {
           },
         },
         attachments: {
+          type: 'work',
           deps: ['api'],
           started: new Date('2020-01-01T00:00:00Z'),
           input: [[1, 2, 3]],
@@ -501,7 +957,7 @@ describe('resumeTopology', () => {
   const modifiedSpec = _.set('attachments.run', attachmentsRun, spec)
 
   test('resume after initial error', async () => {
-    const { start, getSnapshot } = runTopology(modifiedSpec, dag)
+    const { start, getSnapshot } = runTopology(modifiedSpec)
     await expect(start()).rejects.toThrow('Errored nodes: ["attachments"]')
     const snapshot = getSnapshot()
     expect(snapshot).toMatchObject({
@@ -600,6 +1056,7 @@ describe('resumeTopology', () => {
       status: 'completed',
       data: {
         api: {
+          type: 'work',
           deps: [],
           input: [1, 2, 3],
           status: 'completed',
@@ -608,6 +1065,7 @@ describe('resumeTopology', () => {
           },
         },
         details: {
+          type: 'work',
           deps: ['api'],
           input: [
             {

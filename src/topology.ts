@@ -5,14 +5,12 @@ import {
   Events,
   Snapshot,
   Options,
-  RunInput,
   SnapshotData,
   RunTopologyInternal,
   ResumeTopology,
   RunTopology,
-  NodeDef,
   Spec,
-  NodeData,
+  NodeType,
 } from './types'
 import { findKeys } from './util'
 import EventEmitter from 'eventemitter3'
@@ -51,6 +49,20 @@ export const filterDAG = (dag: DAG, options: Options = {}): DAG => {
 }
 
 /**
+ * Get the dependents of the node.
+ */
+const getDependents = (node: string, dag: DAG) => {
+  const nodes: string[] = []
+  for (const key in dag) {
+    const { deps } = dag[key]
+    if (deps.includes(node)) {
+      nodes.push(key)
+    }
+  }
+  return nodes
+}
+
+/**
  * Get a list of nodes where all dependencies have completed and the
  * node's status is pending.
  */
@@ -72,67 +84,129 @@ export const getNodesReadyToRun = (dag: DAG, data: SnapshotData) => {
 }
 
 /**
- * Generate an array from the outputs of the node's dependencies.
+ * Get the input data from dependencies.
  */
 export const getInputData = (dag: DAG, node: string, data: SnapshotData) => {
-  // Get input data off of snapshot if exists
-  if (_.has([node, 'input'], data)) {
-    return _.get([node, 'input'], data)
+  // Use existing input data from snapshot if it exists
+  const snapshotInput = _.get([node, 'input'], data)
+  if (snapshotInput) {
+    return snapshotInput
   }
-  // Input is the output of the node's dependencies
   const deps = dag[node].deps
-  return deps.map((dep) => _.get([dep, 'output'], data))
+  const input = []
+  for (const dep of deps) {
+    const type = dag[dep].type
+    // Input is the output of the dependency
+    if (type === 'work') {
+      input.push(_.get([dep, 'output'], data))
+    }
+    // Input is the input of the dependency
+    else {
+      const depInput = _.get([dep, 'input'], data)
+      if (depInput) {
+        input.push(...depInput)
+      }
+    }
+  }
+  return input
 }
 
 /**
  * Update the snapshot when various node-level events take place
  * and emit the modified snapshot.
  */
-const nodeEventHandler = (
-  node: string,
-  snapshot: Snapshot,
-  emitter: EventEmitter<Events>
-) => {
-  const updateState = (state: any) => {
-    // Update snapshot
-    snapshot.data[node].state = state
-    // Emit
-    emitter.emit('data', snapshot)
+const nodeEventHandler =
+  (snapshot: Snapshot, emitter: EventEmitter<Events>) => (node: string) => {
+    const updateState = (state: any) => {
+      // Update snapshot
+      snapshot.data[node].state = state
+      // Emit
+      emitter.emit('data', snapshot)
+    }
+    const running = (data: any) => {
+      // Update snapshot
+      snapshot.data[node].started = new Date()
+      snapshot.data[node].input = data
+      snapshot.data[node].status = 'running'
+      // Emit
+      emitter.emit('data', snapshot)
+    }
+    const completed = (output?: any) => {
+      // Update snapshot
+      if (output !== undefined) {
+        snapshot.data[node].output = output
+      }
+      snapshot.data[node].status = 'completed'
+      snapshot.data[node].finished = new Date()
+      // Emit
+      emitter.emit('data', snapshot)
+    }
+    const branched = (selected: string, reason?: string) => {
+      // Update snapshot
+      snapshot.data[node].status = 'completed'
+      snapshot.data[node].selected = selected
+      if (reason) {
+        snapshot.data[node].reason = reason
+      }
+      snapshot.data[node].finished = new Date()
+      // Emit
+      emitter.emit('data', snapshot)
+    }
+    const skipped = () => {
+      // Update snapshot
+      snapshot.data[node].status = 'skipped'
+      snapshot.data[node].finished = new Date()
+      // Emit
+      emitter.emit('data', snapshot)
+    }
+    const suspended = () => {
+      // Update snapshot
+      snapshot.data[node].status = 'suspended'
+      snapshot.data[node].finished = new Date()
+      // Emit
+      emitter.emit('data', snapshot)
+    }
+    const errored = (error: any) => {
+      // Update snapshot
+      snapshot.data[node].status = 'errored'
+      snapshot.data[node].finished = new Date()
+      // Capture stack and any abritrary properties if instance of Error
+      snapshot.data[node].error =
+        error instanceof Error ? { ...error, stack: error.stack } : error
+      // Emit
+      emitter.emit('data', snapshot)
+    }
+    return {
+      updateState,
+      running,
+      completed,
+      branched,
+      skipped,
+      suspended,
+      errored,
+    }
   }
-  const running = (data: any) => {
-    // Update snapshot
-    snapshot.data[node].started = new Date()
-    snapshot.data[node].input = data
-    snapshot.data[node].status = 'running'
-    // Emit
-    emitter.emit('data', snapshot)
-  }
-  const completed = (output: any) => {
-    // Update snapshot
-    snapshot.data[node].output = output
-    snapshot.data[node].status = 'completed'
-    snapshot.data[node].finished = new Date()
-    // Emit
-    emitter.emit('data', snapshot)
-  }
-  const errored = (error: any) => {
-    // Update snapshot
-    snapshot.data[node].status = 'errored'
-    snapshot.data[node].finished = new Date()
-    // Capture stack and any abritrary properties if instance of Error
-    snapshot.data[node].error =
-      error instanceof Error ? { ...error, stack: error.stack } : error
-    // Emit
-    emitter.emit('data', snapshot)
-  }
-  return { updateState, running, completed, errored }
-}
 
 /**
  * Check if all nodes in the DAG are in the spec
  */
 export const getMissingSpecNodes = (spec: Spec, dag: DAG) =>
   _.difference(Object.keys(dag), Object.keys(spec))
+
+const branch = (node: string, reason?: string) => ({
+  node,
+  reason,
+})
+
+const NONE = Symbol('NONE')
+
+const none = (reason?: string) => ({
+  node: NONE,
+  reason,
+})
+
+// eslint-disable-next-line
+const noOp = async () => {}
 
 const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   const missingSpecNodes = getMissingSpecNodes(spec, dag)
@@ -146,6 +220,7 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
   const promises: ObjectOfPromises = {}
   // Event emitter
   const emitter = new EventEmitter<Events>()
+  const eventHandler = nodeEventHandler(snapshot, emitter)
 
   const start = async () => {
     // Emit initial snapshot
@@ -162,8 +237,25 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
         // Get errored nodes
         const errored = findKeys({ status: 'errored' }, snapshot.data)
         const hasErrors = !_.isEmpty(errored)
+        // Was part of the toplogy suspended?
+        const suspended = findKeys({ status: 'suspended' }, snapshot.data)
         // Update snapshot
-        snapshot.status = hasErrors ? 'errored' : 'completed'
+        const status = hasErrors
+          ? 'errored'
+          : suspended.length
+          ? 'suspended'
+          : 'completed'
+        snapshot.status = status
+        // Get nodes with pending status
+        const pending = findKeys({ status: 'pending' }, snapshot.data)
+        // Suspend pending nodes if topology is suspended
+        if (status === 'suspended') {
+          pending.forEach((node) => eventHandler(node).suspended())
+        }
+        // Skip pending nodes if topology is completed
+        if (status === 'completed') {
+          pending.forEach((node) => eventHandler(node).skipped())
+        }
         snapshot.finished = new Date()
         // Emit
         emitter.emit(hasErrors ? 'error' : 'done', snapshot)
@@ -172,40 +264,78 @@ const _runTopology: RunTopologyInternal = (spec, dag, snapshot, context) => {
         if (hasErrors) {
           throw new TopologyError(`Errored nodes: ${JSON.stringify(errored)}`)
         }
+        // Exit loop
         return
       }
 
       // Run nodes that have not been run yet
       for (const node of readyToRunNodes) {
         // Snapshot updater
-        const events = nodeEventHandler(node, snapshot, emitter)
+        const events = eventHandler(node)
         // Get the node from the spec
-        const { run } = spec[node]
-        // Use initial data if node has no dependencies, otherwise, data from
-        // completed nodes
+        const { run, type } = spec[node]
+        // Get the input data from dependencies
         const data = getInputData(dag, node, snapshot.data)
-        // Callback to update state
-        const updateState = events.updateState
-        // Get node state. Will only be present if resuming.
-        const state = snapshot.data[node]?.state
         // Run fn input
-        const runInput: RunInput = {
-          data,
-          updateState,
-          state,
-          context,
-          node,
-          signal: abortController.signal,
-        }
+        const baseInput = { data, node, context }
         // Update snapshot
         events.running(data)
-        // Call run fn
-        promises[node] = run(runInput)
-          .then(events.completed)
-          .catch(events.errored)
-          .finally(() => {
-            delete promises[node]
-          })
+        // Get dependent nodes
+        const dependents = getDependents(node, dag)
+
+        // Handle branching node type
+        if (type === 'branching') {
+          const runFn = async () => run({ ...baseInput, branch, none })
+          promises[node] = runFn()
+            .then(({ node: selected, reason }) => {
+              events.branched(selected.toString(), reason)
+              // Explicitly skip all dependents
+              if (selected === NONE) {
+                // Skip all dependents
+                dependents.forEach((node) => eventHandler(node).skipped())
+              } else if (typeof selected === 'string') {
+                // Check if selected branch is a dependent of the node
+                if (!dependents.includes(selected)) {
+                  throw new TopologyError(`Branch not found: ${selected}`)
+                }
+                // Skip dependents that were not selected
+                _.pull(selected, dependents).forEach((node) =>
+                  eventHandler(node).skipped()
+                )
+              }
+            })
+            .catch(events.errored)
+            .finally(() => {
+              delete promises[node]
+            })
+        }
+        // Handle suspension and work node types
+        else {
+          // Callback to update state
+          const updateState = events.updateState
+          // Get node state. Will only be present if resuming.
+          const state = snapshot.data[node]?.state
+          const input = {
+            ...baseInput,
+            updateState,
+            state,
+            signal: abortController.signal,
+          }
+          const handleSuspension = () => {
+            // Set status to completed
+            events.completed()
+            // Suspend all dependent nodes
+            dependents.forEach((node) => eventHandler(node).suspended())
+          }
+          // The run fn may not exist for suspension node type
+          const runFn = run || noOp
+          promises[node] = runFn(input)
+            .then(type === 'suspension' ? handleSuspension : events.completed)
+            .catch(events.errored)
+            .finally(() => {
+              delete promises[node]
+            })
+        }
       }
 
       // Wait for a promise to resolve
@@ -235,12 +365,26 @@ export const initSnapshotData = (dag: DAG, data?: any): SnapshotData => {
 
   for (const node in dag) {
     snapshotData[node] = { ...dag[node], status: 'pending' }
-    // Data exists and node has no dependencies:w
+    // Data exists and node has no dependencies
     if (data !== undefined && noDepsNodes.includes(node)) {
       snapshotData[node].input = [data]
     }
   }
   return snapshotData
+}
+
+const extractDag = (
+  obj: Record<string, { deps: string[]; type?: NodeType }>
+) => {
+  const dag: DAG = {}
+
+  for (const node in obj) {
+    const nodeDef = obj[node]
+    // Default node type to work if not set
+    dag[node] = { deps: nodeDef.deps, type: nodeDef.type || 'work' }
+  }
+
+  return dag
 }
 
 /**
@@ -255,10 +399,7 @@ export const initSnapshotData = (dag: DAG, data?: any): SnapshotData => {
  * done.
  */
 export const runTopology: RunTopology = (spec, options) => {
-  const _dag: DAG = _.mapValues<NodeDef, { deps: string[] }>(
-    _.pick('deps'),
-    spec
-  )
+  const _dag = extractDag(spec)
   // Get the filtered dag
   const dag = filterDAG(_dag, options)
   // Initialize snapshot data
@@ -275,14 +416,17 @@ export const runTopology: RunTopology = (spec, options) => {
 
 /**
  * Set uncompleted nodes to 'pending' and reset appropriate
- * NodeDef fields.
+ * NodeDef fields. Ignore skipped nodes.
  */
 const resetUncompletedNodes = (data: SnapshotData): SnapshotData =>
   _.mapValues((nodeData) => {
     const { status, ...obj } = nodeData
-    return status === 'completed'
+    return status === 'completed' || status === 'skipped'
       ? nodeData
-      : { ..._.pick(['input', 'state', 'deps'], obj), status: 'pending' }
+      : {
+          ..._.pick(['input', 'state', 'deps', 'type'], obj),
+          status: 'pending',
+        }
   }, data)
 
 /**
@@ -321,10 +465,7 @@ export const resumeTopology: ResumeTopology = (spec, snapshot, options) => {
   }
   // Initialize snapshot for running
   const snap = getResumeSnapshot(snapshot)
-  const dag: DAG = _.mapValues<NodeData, { deps: string[] }>(
-    _.pick('deps'),
-    snap.data
-  )
+  const dag = extractDag(snap.data)
   // Run the topology
   return _runTopology(spec, dag, snap, options?.context)
 }

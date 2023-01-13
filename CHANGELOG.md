@@ -1,3 +1,8 @@
+# 0.9.0
+
+* Added two new node types: `branching` and `suspension`. The former
+allows for branching logic and the latter allows for suspending execution.
+
 # 0.8.0
 
 * BREAKING CHANGE: Changed `promise` to `start` fn.
